@@ -64,7 +64,7 @@
             android:id="@+id/edit_opening"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number"
+            android:inputType="numberDecimal"
             android:hint="Enter Opening Balance" />
 
         <!-- Consumption -->
@@ -78,7 +78,7 @@
             android:id="@+id/edit_consumption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number"
+            android:inputType="numberDecimal"
             android:hint="Enter Consumption" />
 
         <!-- Total Emergency -->
@@ -92,7 +92,7 @@
             android:id="@+id/edit_total_emergency"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number"
+            android:inputType="numberDecimal"
             android:hint="Enter Total Emergency" />
 
         <!-- Closing Balance -->
@@ -106,7 +106,7 @@
             android:id="@+id/edit_closing"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="number"
+            android:inputType="numberDecimal"
             android:hint="Enter Closing Balance" />
 
         <!-- Error Text -->

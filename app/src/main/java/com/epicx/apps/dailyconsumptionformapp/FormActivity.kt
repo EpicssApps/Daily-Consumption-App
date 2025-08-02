@@ -184,7 +184,7 @@ class FormActivity : AppCompatActivity() {
             ) {
                 errorText.text = "All fields are required"
             } else if (
-                listOf(opening, consumption, emergency, closing).any { it.toIntOrNull() == null }
+                listOf(opening, consumption, emergency, closing).any { it.toFloatOrNull() == null }
             ) {
                 errorText.text = "Numeric fields must be numbers"
             } else {
@@ -248,6 +248,7 @@ class FormActivity : AppCompatActivity() {
                                 Toast.makeText(this@FormActivity, "Upload successful!", Toast.LENGTH_LONG).show()
                             } else {
                                 Toast.makeText(this@FormActivity, "Upload failed: " + result.exceptionOrNull()?.message, Toast.LENGTH_LONG).show()
+                                Log.e("failedToLoad", "Upload failed", result.exceptionOrNull())
                             }
                         }
                     }

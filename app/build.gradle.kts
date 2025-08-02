@@ -44,6 +44,7 @@ dependencies {
     implementation("com.squareup.moshi:moshi:1.15.1")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
     implementation("com.google.code.gson:gson:2.10.1")
+    implementation ("org.jsoup:jsoup:1.21.1")
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)

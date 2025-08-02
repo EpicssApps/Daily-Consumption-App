@@ -9,21 +9,47 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URLEncoder
-import kotlin.text.isNullOrEmpty
+import java.util.*
+import java.util.concurrent.TimeUnit
 
 object GoogleSheetApi {
-    private val client = OkHttpClient()
+    // OkHttpClient with increased timeouts (60 seconds each)
+    private val client = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
+        .build()
+
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
 
-    private const val BASE_URL = "https://script.google.com/macros/s/AKfycbzXgCZbGtD4fg-G38FzN98l1daPC8LEbxCMzOLxL_PVKFOTB3VAVNFU-btoxKMRsexJ/exec"
+    private const val BASE_URL = "https://script.google.com/macros/s/AKfycbyxvLOI7Ux-xxV3wJcp21PORHkLQ2Elhi5jbffnFmQIOzOt3H5M3VJzLgDYxIQpCi1v/exec"
+
+    // Ambulances for which shift tag should be added
+    private val shiftAmbulances = listOf("BNA 17", "BNA 21", "BNA 22", "BNA 25", "BNA 26", "BNA 29")
+
+    // Returns "Morning", "Evening" or null (for Night)
+    private fun getShiftTag(): String? {
+        val now = Calendar.getInstance()
+        val hour = now.get(Calendar.HOUR_OF_DAY)
+        return when {
+            hour in 8 until 15 -> "Morning"
+            hour in 15 until 22 -> "Evening"
+            else -> null // Night
+        }
+    }
 
     suspend fun upsertData(data: FormData): Result<Unit> = withContext(Dispatchers.IO) {
+        // Attach shift tag to date if needed
+        val shiftTag = if (data.vehicleName in shiftAmbulances) getShiftTag() else null
+        val dateWithShift = if (shiftTag != null) "${data.date} ($shiftTag)" else data.date
+        val modifiedData = data.copy(date = dateWithShift)
+
         val jsonAdapter = moshi.adapter(FormData::class.java)
         val body = RequestBody.create(
-            "application/json".toMediaTypeOrNull(),
-            jsonAdapter.toJson(data)
+            "application/json; charset=utf-8".toMediaTypeOrNull(),
+            jsonAdapter.toJson(modifiedData)
         )
         val request = Request.Builder()
             .url("$BASE_URL?action=upsert")
@@ -32,7 +58,7 @@ object GoogleSheetApi {
         try {
             client.newCall(request).execute().use { response ->
                 val respBody = response.body?.string()
-                Log.d("SheetApi", "POST response: code=${response.code} | body=$respBody") // Logcat: POST response code/body
+                Log.d("SheetApi", "POST response: code=${response.code} | body=$respBody")
                 if (response.isSuccessful) {
                     Result.success(Unit)
                 } else {
@@ -117,18 +143,24 @@ object GoogleSheetApi {
     }
 
     suspend fun bulkUpload(date: String, data: List<FormData>): Result<Unit> = withContext(Dispatchers.IO) {
+        val shiftTag = getShiftTag()
+        val modifiedList = data.map { fd ->
+            if (fd.vehicleName in shiftAmbulances && shiftTag != null) {
+                fd.copy(date = "$date ($shiftTag)")
+            } else {
+                fd.copy(date = date)
+            }
+        }
+
         val jsonAdapter = moshi.adapter<List<FormData>>(
             Types.newParameterizedType(
                 List::class.java,
                 FormData::class.java
             )
         )
-        val jsonBody =
-            jsonAdapter.toJson(data.map { it.copy(date = date) }) // Add date to all records
-
         val body = RequestBody.create(
-            "application/json".toMediaTypeOrNull(),
-            jsonBody
+            "application/json; charset=utf-8".toMediaTypeOrNull(),
+            jsonAdapter.toJson(modifiedList)
         )
         val url = "$BASE_URL?action=bulkUpload&date=$date"
         val request = Request.Builder().url(url).post(body).build()

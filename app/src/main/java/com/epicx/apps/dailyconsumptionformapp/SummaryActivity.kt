@@ -9,7 +9,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.epicx.apps.dailyconsumptionformapp.databinding.ActivitySummaryBinding
 import java.io.File
-
+import android.app.AlertDialog
+import android.net.Uri
+import androidx.core.content.FileProvider
 class SummaryActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySummaryBinding
     private lateinit var db: AppDatabase
@@ -54,7 +56,33 @@ class SummaryActivity : AppCompatActivity() {
             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
             val file = File(downloadsDir, fileName)
             val ok = db.exportToCSV(file)
-            Toast.makeText(this, if (ok) "Exported to Downloads/$fileName" else "Export Failed!", Toast.LENGTH_LONG).show()
+            if (ok) {
+                // Pehle Toast dikhado (optional)
+                Toast.makeText(this, "Exported to Downloads/$fileName", Toast.LENGTH_LONG).show()
+
+                // Ab ek dialog show karo, jisme "Share" button ho
+                AlertDialog.Builder(this)
+                    .setTitle("Export Successful")
+                    .setMessage("File export ho gayi hai. Ab aap is file ko share bhi kar sakte hain.")
+                    .setPositiveButton("Share") { dialog, _ ->
+                        // Share intent banao
+                        val uri: Uri = FileProvider.getUriForFile(
+                            this,
+                            "${applicationContext.packageName}.fileprovider",
+                            file
+                        )
+                        val shareIntent = Intent(Intent.ACTION_SEND)
+                        shareIntent.type = "text/csv"
+                        shareIntent.putExtra(Intent.EXTRA_STREAM, uri)
+                        shareIntent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        startActivity(Intent.createChooser(shareIntent, "CSV file share karen..."))
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton("Close", null)
+                    .show()
+            } else {
+                Toast.makeText(this, "Export Failed!", Toast.LENGTH_LONG).show()
+            }
         }
         // Import Button
         binding.btnImport.setOnClickListener {
