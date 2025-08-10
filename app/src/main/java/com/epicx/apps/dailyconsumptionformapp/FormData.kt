@@ -6,5 +6,7 @@ data class FormData(
     val openingBalance: String = "",
     val consumption: String = "",
     val totalEmergency: String = "",
-    val closingBalance: String = ""
+    val closingBalance: String = "",
+    val storeIssued: String = "",
+    val stockAvailable: String = ""
 )

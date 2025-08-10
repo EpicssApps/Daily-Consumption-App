@@ -23,11 +23,10 @@ object GoogleSheetApi {
     private val moshi = Moshi.Builder()
         .add(KotlinJsonAdapterFactory())
         .build()
-
-    private const val BASE_URL = "https://script.google.com/macros/s/AKfycbyxvLOI7Ux-xxV3wJcp21PORHkLQ2Elhi5jbffnFmQIOzOt3H5M3VJzLgDYxIQpCi1v/exec"
+    private const val BASE_URL = "https://script.google.com/macros/s/AKfycbzurHgnnX-nf8f0Xvbihovh7Q1g69d1kB5AsyubQ-Yf4jxF9Wx68ZnoN3rK3QZDdvg/exec"
 
     // Ambulances for which shift tag should be added
-    private val shiftAmbulances = listOf("BNA 17", "BNA 21", "BNA 22", "BNA 25", "BNA 26", "BNA 29")
+    private val shiftAmbulances = listOf("BNA 08","BNA 09","BNA 10","BNA 11","BNA 17", "BNA 25", "BNA 26", "BNA 29")
 
     // Returns "Morning", "Evening" or null (for Night)
     private fun getShiftTag(): String? {
@@ -36,120 +35,99 @@ object GoogleSheetApi {
         return when {
             hour in 8 until 15 -> "Morning"
             hour in 15 until 22 -> "Evening"
-            else -> null // Night
+            hour in 22..23 -> "Night"
+            hour in 0 until 8 -> "Early Morning"
+            else -> null // Should never happen, but just in case
         }
     }
 
-    suspend fun upsertData(data: FormData): Result<Unit> = withContext(Dispatchers.IO) {
-        // Attach shift tag to date if needed
-        val shiftTag = if (data.vehicleName in shiftAmbulances) getShiftTag() else null
-        val dateWithShift = if (shiftTag != null) "${data.date} ($shiftTag)" else data.date
-        val modifiedData = data.copy(date = dateWithShift)
-
-        val jsonAdapter = moshi.adapter(FormData::class.java)
-        val body = RequestBody.create(
-            "application/json; charset=utf-8".toMediaTypeOrNull(),
-            jsonAdapter.toJson(modifiedData)
-        )
-        val request = Request.Builder()
-            .url("$BASE_URL?action=upsert")
-            .post(body)
-            .build()
-        try {
-            client.newCall(request).execute().use { response ->
-                val respBody = response.body?.string()
-                Log.d("SheetApi", "POST response: code=${response.code} | body=$respBody")
-                if (response.isSuccessful) {
-                    Result.success(Unit)
-                } else {
-                    val fullError = "Failed to submit: ${response.code} ${response.message} Body: $respBody"
-                    Log.e("SheetApi", fullError)
-                    Result.failure(IOException(fullError))
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("SheetApi", "Exception in upsertData", e)
-            Result.failure(e)
-        }
+    // Helper to sanitize numbers
+    fun safeNumberString(value: String?): String {
+        return value?.toDoubleOrNull()?.let { String.format("%.2f", it) } ?: "0.00"
     }
 
-    // Get single record (date + vehicle + medicine)
-    suspend fun getSingleData(
-        date: String,
-        vehicleName: String,
-        medicineName: String
-    ): Result<FormData> = withContext(Dispatchers.IO) {
-        val url = "$BASE_URL?action=get&date=${URLEncoder.encode(date, "UTF-8")}" +
-                "&vehicleName=${URLEncoder.encode(vehicleName, "UTF-8")}" +
-                "&medicineName=${URLEncoder.encode(medicineName, "UTF-8")}"
+    suspend fun getAllForDate(date: String? = null): Result<List<FormData>> = withContext(Dispatchers.IO) {
+        val url = if (date.isNullOrBlank()) {
+            "$BASE_URL?action=getAllForDate"
+        } else {
+            "$BASE_URL?action=getAllForDate&date=${URLEncoder.encode(date, "UTF-8")}"
+        }
         val request = Request.Builder().url(url).get().build()
         try {
             client.newCall(request).execute().use { response ->
                 val json = response.body?.string()
-                Log.d("SheetApi", "GET single record: code=${response.code} | url=$url | body=$json")
-                if (!response.isSuccessful) {
-                    val fullError = "Fetch error: ${response.code} ${response.message} Body: $json"
-                    Log.e("SheetApi", fullError)
-                    return@withContext Result.failure(IOException(fullError))
-                }
-                if (json.isNullOrEmpty()) {
-                    Log.e("SheetApi", "No data returned from API")
-                    return@withContext Result.failure(IOException("No data returned"))
-                }
-                val adapter = moshi.adapter(FormData::class.java)
-                val data = adapter.fromJson(json)
-                if (data != null) Result.success(data)
-                else {
-                    Log.e("SheetApi", "Malformed data: $json")
-                    Result.failure(IOException("Malformed data"))
-                }
-            }
-        } catch (e: Exception) {
-            Log.e("SheetApi", "Exception in getSingleData", e)
-            Result.failure(e)
-        }
-    }
-
-    // Get all records for a vehicle (all medicines, any date)
-    suspend fun getAllForVehicle(vehicleName: String): Result<List<FormData>> = withContext(Dispatchers.IO) {
-        val url = "$BASE_URL?action=getAllForVehicle&vehicleName=${URLEncoder.encode(vehicleName, "UTF-8")}"
-        val request = Request.Builder().url(url).get().build()
-        try {
-            client.newCall(request).execute().use { response ->
-                val json = response.body?.string()
-                Log.d("SheetApi", "GET all for vehicle: code=${response.code} | url=$url | body=$json")
-                if (!response.isSuccessful) {
-                    val fullError = "Fetch error: ${response.code} ${response.message} Body: $json"
-                    Log.e("SheetApi", fullError)
-                    return@withContext Result.failure(IOException(fullError))
-                }
-                if (json.isNullOrEmpty()) {
-                    Log.e("SheetApi", "No data returned from API")
+                if (!response.isSuccessful || json.isNullOrEmpty()) {
                     return@withContext Result.failure(IOException("No data returned"))
                 }
                 val type = Types.newParameterizedType(List::class.java, FormData::class.java)
                 val adapter = moshi.adapter<List<FormData>>(type)
                 val data = adapter.fromJson(json)
                 if (data != null) Result.success(data)
-                else {
-                    Log.e("SheetApi", "Malformed data: $json")
-                    Result.failure(IOException("Malformed data"))
-                }
+                else Result.failure(IOException("Malformed data"))
             }
         } catch (e: Exception) {
-            Log.e("SheetApi", "Exception in getAllForVehicle", e)
             Result.failure(e)
         }
+    }
+    fun isZero(value: String?): Boolean {
+        return value.isNullOrBlank() ||
+                value == "0" ||
+                value == "00" ||
+                value == "000" ||
+                value == ".0" ||
+                value == "0.0" ||
+                value == ".00" ||
+                value.toDoubleOrNull() == 0.0
     }
 
     suspend fun bulkUpload(date: String, data: List<FormData>): Result<Unit> = withContext(Dispatchers.IO) {
         val shiftTag = getShiftTag()
+        val now = Calendar.getInstance()
+        val hour = now.get(Calendar.HOUR_OF_DAY)
+        val isNight = (shiftTag == null)
+        val appVersion = "V7"
+        val zeroBalances =
+            (shiftTag != null && (shiftTag == "Morning" || shiftTag == "Evening" || shiftTag == "Early Morning"))
+
         val modifiedList = data.map { fd ->
-            if (fd.vehicleName in shiftAmbulances && shiftTag != null) {
-                fd.copy(date = "$date ($shiftTag)")
+            val safeOpening = safeNumberString(fd.openingBalance)
+            val safeConsumption = safeNumberString(fd.consumption)
+            val safeTotalEmergency = safeNumberString(fd.totalEmergency)
+            val safeClosing = safeNumberString(fd.closingBalance)
+            val safeStockAvailable = safeNumberString(fd.stockAvailable)
+
+            val newVehicleName = if (fd.vehicleName in shiftAmbulances && shiftTag != null) {
+                "${fd.vehicleName} $shiftTag $appVersion"
             } else {
-                fd.copy(date = date)
+                fd.vehicleName
             }
+
+            if (fd.vehicleName in shiftAmbulances && zeroBalances) {
+                fd.copy(
+                    vehicleName = newVehicleName,
+                    date = date,
+                    openingBalance = "0",
+                    closingBalance = "0",
+                    consumption = safeConsumption,
+                    totalEmergency = safeTotalEmergency,
+                    stockAvailable = safeStockAvailable
+                )
+            } else {
+                fd.copy(
+                    vehicleName = newVehicleName,
+                    date = date,
+                    openingBalance = safeOpening,
+                    closingBalance = safeClosing,
+                    consumption = safeConsumption,
+                    totalEmergency = safeTotalEmergency,
+                    stockAvailable = safeStockAvailable
+                )
+            }
+        }.filter { fd ->
+            !(isZero(fd.openingBalance) &&
+                    isZero(fd.consumption) &&
+                    isZero(fd.totalEmergency) &&
+                    isZero(fd.closingBalance))
         }
 
         val jsonAdapter = moshi.adapter<List<FormData>>(

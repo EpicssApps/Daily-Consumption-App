@@ -1,138 +1,230 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:fitsSystemWindows="true"
+    tools:context=".FormActivity">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_gravity="center"
         android:orientation="vertical"
         android:padding="18dp">
 
-        <!-- Date Picker -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Date"
-            android:textStyle="bold"/>
-        <EditText
-            android:id="@+id/edit_date"
+        <!-- Top Summary Row: Opening & Closing Balance & Store Issued -->
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:focusable="false"
-            android:hint="Select Date"
-            android:inputType="none"
-            android:drawableRight="@android:drawable/ic_menu_my_calendar" />
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/balance_summary_bg"
+            android:padding="12dp"
+            android:layout_marginBottom="16dp">
+
+            <!-- Opening Balance -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/opening_balance"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:textColor="#2196F3"
+                    android:textSize="15sp"/>
+                <TextView
+                    android:id="@+id/text_opening"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#ffffff"
+                    android:background="@drawable/balance_value_bg"
+                    android:padding="6dp"
+                    android:layout_marginTop="4dp"/>
+            </LinearLayout>
+
+            <!-- Divider -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="#EEEEEE"/>
+
+            <!-- Closing Balance -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/closing_balance"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:textColor="#4CAF50"
+                    android:textSize="15sp"/>
+                <TextView
+                    android:id="@+id/text_closing"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#ffffff"
+                    android:background="@drawable/balance_value_bg"
+                    android:padding="6dp"
+                    android:layout_marginTop="4dp"/>
+            </LinearLayout>
+
+            <!-- Divider -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="40dp"
+                android:layout_marginStart="12dp"
+                android:layout_marginEnd="12dp"
+                android:background="#EEEEEE"/>
+
+            <!-- Store Issued -->
+            <LinearLayout
+                android:id="@+id/layout_store_issued"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Store Issued"
+                    android:textStyle="bold"
+                    android:gravity="center"
+                    android:textColor="#FFC107"
+                    android:textSize="15sp"/>
+
+                <TextView
+                    android:id="@+id/text_store_issued"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:textColor="#ffffff"
+                    android:background="@drawable/balance_value_bg"
+                    android:padding="6dp"
+                    android:layout_marginTop="4dp"
+                    android:clickable="true"
+                    android:focusable="true"/>
+            </LinearLayout>
+        </LinearLayout>
 
         <!-- Vehicle Spinner -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Vehicle Name"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp"/>
+            android:layout_marginTop="12dp"
+            android:text="@string/vehicle_name"
+            android:textStyle="bold" />
+
         <Spinner
             android:id="@+id/spinner_vehicle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:enabled="false"/>
+            android:enabled="false" />
 
         <!-- Medicine Picker -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Medicine Name"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp"/>
+            android:layout_marginTop="12dp"
+            android:text="@string/medicine_name"
+            android:textStyle="bold" />
+
         <EditText
             android:id="@+id/edit_medicine"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:drawableRight="@android:drawable/ic_menu_search"
             android:focusable="false"
-            android:hint="Select Medicine"
-            android:inputType="none"
-            android:drawableRight="@android:drawable/ic_menu_search" />
-
-        <!-- Opening Balance -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Opening Balance"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp"/>
-        <EditText
-            android:id="@+id/edit_opening"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="numberDecimal"
-            android:hint="Enter Opening Balance" />
+            android:hint="@string/select_medicine"
+            android:inputType="none" />
 
         <!-- Consumption -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Consumption"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp"/>
+            android:layout_marginTop="12dp"
+            android:text="@string/consumption"
+            android:textStyle="bold" />
+
         <EditText
             android:id="@+id/edit_consumption"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="numberDecimal"
-            android:hint="Enter Consumption" />
+            android:hint="@string/enter_consumption"
+            android:inputType="numberDecimal" />
 
-        <!-- Total Emergency -->
+        <!-- Total Emergency Label -->
         <TextView
+            android:id="@+id/text_emergency_label"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Total Emergency"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp"/>
+            android:layout_marginTop="12dp"
+            android:text="@string/total_emergency"
+            android:textStyle="bold" />
+
         <EditText
             android:id="@+id/edit_total_emergency"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="numberDecimal"
-            android:hint="Enter Total Emergency" />
-
-        <!-- Closing Balance -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Closing Balance"
-            android:textStyle="bold"
-            android:layout_marginTop="12dp"/>
-        <EditText
-            android:id="@+id/edit_closing"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:inputType="numberDecimal"
-            android:hint="Enter Closing Balance" />
+            android:hint="@string/enter_total_emergency"
+            android:inputType="number" />
 
         <!-- Error Text -->
         <TextView
             android:id="@+id/text_error"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="#B71C1C"
             android:paddingTop="8dp"
             android:text=""
-            android:textStyle="bold"/>
+            android:textColor="#B71C1C"
+            android:textStyle="bold" />
 
         <!-- Submit Button -->
         <Button
             android:id="@+id/btn_submit"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Save"
-            android:layout_marginTop="18dp"/>
+            android:layout_marginTop="18dp"
+            android:text="@string/save" />
 
         <!-- Summary Button -->
         <Button
             android:id="@+id/btn_summary"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Summary"
-            android:layout_marginTop="8dp"/>
+            android:layout_marginTop="8dp"
+            android:text="@string/summary" />
+
+        <!-- Add New Stock Button -->
+        <Button
+            android:id="@+id/btn_add_stock"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Add New Stock" />
     </LinearLayout>
 </ScrollView>

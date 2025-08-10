@@ -2,6 +2,5 @@
 <resources>
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="dayNight">#FFFFFFFF</color>
-    <color name="teal_700">#018786</color>
+    <color name="dayNight">#000000</color>
 </resources>

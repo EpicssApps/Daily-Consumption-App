@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.google.android.material.card.MaterialCardView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="10dp"
+    app:cardCornerRadius="16dp"
+    app:cardElevation="6dp"
+    app:strokeColor="@color/teal_700"
+    app:strokeWidth="2dp"
+    app:cardBackgroundColor="@color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <!-- First row: Serial number, Date -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <TextView
+                android:id="@+id/tvSerial"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/serial_circle_bg"
+                android:gravity="center"
+                android:text="1"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:textColor="@color/white"
+                android:layout_marginEnd="12dp"/>
+
+            <TextView
+                android:id="@+id/tvDate"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="2025-08-07"
+                android:textStyle="bold"
+                android:textColor="@color/black"
+                android:textSize="16sp" />
+        </LinearLayout>
+
+        <!-- Medicine Name -->
+        <TextView
+            android:id="@+id/tvMedicine"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Medicine Name"
+            android:textStyle="bold"
+            android:textSize="15sp"
+            android:textColor="@color/teal_700"
+            android:layout_marginTop="6dp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- Table-like layout for summary -->
+        <TableLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:stretchColumns="*"
+            android:background="#f6f6f6"
+            android:padding="6dp"
+            android:elevation="2dp">
+
+            <TableRow>
+                <TextView android:text="Opening" android:textStyle="bold" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:text="Cons." android:textStyle="bold" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:text="Emerg." android:textStyle="bold" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:text="Closing" android:textStyle="bold" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:text="Issued" android:textStyle="bold" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:text="Stock" android:textStyle="bold" android:textColor="@color/black" android:gravity="center"/>
+            </TableRow>
+            <TableRow>
+                <TextView android:id="@+id/tvOpening" android:text="0" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:id="@+id/tvConsumption" android:text="0" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:id="@+id/tvEmergency" android:text="0" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:id="@+id/tvClosing" android:text="0" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:id="@+id/tvStoreIssued" android:text="0" android:textColor="@color/black" android:gravity="center"/>
+                <TextView android:id="@+id/tvStockAvailable" android:text="0" android:textColor="@color/black" android:gravity="center"/>
+            </TableRow>
+        </TableLayout>
+
+        <!-- Delete Button -->
+        <Button
+            android:id="@+id/btnDelete"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Delete"
+            android:layout_marginTop="10dp"
+            android:backgroundTint="@color/holo_blue_light"
+            android:textColor="@color/white"
+            android:layout_gravity="end" />
+
+    </LinearLayout>
+</com.google.android.material.card.MaterialCardView>

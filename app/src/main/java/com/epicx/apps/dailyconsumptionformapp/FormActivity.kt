@@ -1,7 +1,8 @@
 package com.epicx.apps.dailyconsumptionformapp
 
+import CheckInternetConnection.observeNetworkConnectivity
+import com.epicx.apps.dailyconsumptionformapp.FormConstants.specialDecimalMeds
 import android.app.AlertDialog
-import android.app.DatePickerDialog
 import android.app.ProgressDialog
 import android.content.Context
 import android.content.Intent
@@ -9,158 +10,129 @@ import android.os.Bundle
 import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
+import com.epicx.apps.dailyconsumptionformapp.databinding.ActivityFormBinding
+import com.epicx.apps.dailyconsumptionformapp.objects.NetworkMonitor
+import com.epicx.apps.dailyconsumptionformapp.objects.SnackbarManager.snackbar
+import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
 class FormActivity : AppCompatActivity() {
 
-    // Vehicle aur medicine ki list yahan likh di hai taake file complete ho
-    private val vehicleList = listOf(
-        "BNA 07", "BNA 08", "BNA 09", "BNA 10", "BNA 11", "BNA 17", "BNA 21", "BNA 22",
-        "BNA 25", "BNA 26", "BNA 29"
-    ) + (1..50).map { n -> "BNB %02d".format(n) }
-    private val medicineList = listOf(
-        "Tab. Paracetamol 500 mg",
-        "Inj. Paracetamol 60 mg (Water based)",
-        "Tab. Asprin 300 mg",
-        "Tab. Angised 0.5 mg",
-        "Inj. Adrenaline in Pre-filled Syringe",
-        "Inj. Hydrocortisone (250 mg)",
-        "Inj. Pheniramine Maleate (25 mg)",
-        "Ipratropium Bromide (20 ml)",
-        "Inj. Dimenhydrinate (50 mg / ml)",
-        "Inj. 25% Dextrose Water (20 ml)",
-        "Inj. Diazepam 10 mg",
-        "Tab. Captopril 25 mg",
-        "Inj. Ringer Lactate (500 ml)",
-        "Inj. Normal Saline (500/1000 ml)",
-        "Inj. Diclofenac sodium water based (75 mg / 3ml)",
-        "Povi-iodine Solution 10% (450 ml)",
-        "Polymyxin B Sulphate Skin Ointment with lignocaine (20 gm)",
-        "Lignocaine gel 2% (15 gm)",
-        "Surface Disinfectant Spray",
-        "Ethyl Chloride Spray (175 ml)",
-        "Silver Sulphadiazine Cream (50gm)",
-        "Airway 0",
-        "Airway 1",
-        "Airway 2",
-        "Airway 3",
-        "Airway 4",
-        "Airway 5",
-        "Laryngeal Mask Airway (LMA) 02",
-        "Laryngeal Mask Airway (LMA) 03",
-        "Laryngeal Mask Airway (LMA) 04",
-        "Alcohol Swabs",
-        "Face mask (Disposable, Cup shape with double strings)",
-        "Disposable Syringes 05 ml",
-        "Disposable 20 ml",
-        "IV Cannula 18 No",
-        "IV Cannula 20 No",
-        "IV Cannula 22 No",
-        "IV Cannula 24 No",
-        "Drip Set",
-        "Intraosseous Needle",
-        "Cotton Bandages BPC 6.5 cm X 6 meter (2.5\")",
-        "Cotton Bandages BPC 10 cm X 6 meter (4 inch)",
-        "Cotton Bandages BPC 15 cm X 6 meter",
-        "Crape Bandage Size 04 inches x 4.5 meter",
-        "Sterilized Gauze Pieces 10 cm x 10 cm 1 box",
-        "Paper Adhesive Tape (1”)",
-        "Cotton Roll (500 gm)",
-        "Nelton Catheter (18 Gauge)",
-        "Nebulizer Mask with tubing (Small)",
-        "Nebulizer Mask with tubing (Large)",
-        "Adjustable Hard Cervical Collar with chin Support",
-        "Triangular Bandage (Medium)",
-        "Triangular Bandage (Large)",
-        "Compatible Lancets",
-        "Glucometer Active",
-        "Glucometer Strips Accu-Check Active",
-        "Glucometer Strips Accu-Check Instant",
-        "Glucometer Strips Accu-Check Performa",
-        "Glucometer Strips Medisign",
-        "Neomycin Sulphate 0.5%, bacitracin zinc",
-        "Examination Gloves"
-    )
-
+    private lateinit var binding: ActivityFormBinding
+    private val vehicleList = FormConstants.vehicleList
+    private val medicineList = FormConstants.medicineList
     private lateinit var db: AppDatabase
+    private var alertDialog: AlertDialog? = null
     private lateinit var defaultVehicle: String
+    private lateinit var layoutStoreIssued: LinearLayout
+
+    // For UI & calculations
+    private var lastLoadedClosingBalance: Float = 0f
+    private var lastLoadedOpeningBalance: Float = 0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_form)
+        binding = ActivityFormBinding.inflate(layoutInflater)
+        setContentView(binding.root)
 
         db = AppDatabase(this)
+        rollOverBalancesIfDateChanged(this, db)
+
         val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         defaultVehicle = prefs.getString("default_vehicle", null) ?: ""
 
+        layoutStoreIssued = findViewById(R.id.layout_store_issued)
         val vehicleSpinner = findViewById<Spinner>(R.id.spinner_vehicle)
         val medicineEdit = findViewById<EditText>(R.id.edit_medicine)
-        val editOpening = findViewById<EditText>(R.id.edit_opening)
+        val textOpening = findViewById<TextView>(R.id.text_opening)
+        val textClosing = findViewById<TextView>(R.id.text_closing)
         val editConsumption = findViewById<EditText>(R.id.edit_consumption)
         val editEmergency = findViewById<EditText>(R.id.edit_total_emergency)
-        val editClosing = findViewById<EditText>(R.id.edit_closing)
         val errorText = findViewById<TextView>(R.id.text_error)
         val btnSubmit = findViewById<Button>(R.id.btn_submit)
         val btnSummary = findViewById<Button>(R.id.btn_summary)
-        val editDate = findViewById<EditText>(R.id.edit_date)
+        val btnAddStock = findViewById<Button>(R.id.btn_add_stock)
+        val textEmergencyLabel = findViewById<TextView>(R.id.text_emergency_label)
+        val textStoreIssued = findViewById<TextView>(R.id.text_store_issued)
 
         val vehicleAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, vehicleList)
         vehicleAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         vehicleSpinner.adapter = vehicleAdapter
+        NetworkMonitor.init(applicationContext)
+        val bandageKey = "bandage_deleted_once"
+        if (!prefs.getBoolean(bandageKey, false)) {
+            // Sabhi vehicles se delete karne ke liye loop:
+            val allVehicles = FormConstants.vehicleList // ya apni vehicle list use karein
+            for (vehicle in allVehicles) {
+                db.deleteMedicineByName(vehicle, "Cotton Bandages BPC 6.5 cm X 6 meter (2.5\")")
+            }
+            prefs.edit().putBoolean(bandageKey, true).apply()
+        }
 
-        // Pehli dafa ya jab default vehicle set na ho
+        NetworkMonitor.observe(this) { isConnected ->
+            if (!isConnected) {
+                if (alertDialog?.isShowing != true) {
+                    showAlertDialog()
+                }
+            } else {
+                alertDialog?.dismiss()
+            }
+        }
+
+        btnAddStock.setOnClickListener {
+            val medicineName = medicineEdit.text.toString()
+            if (medicineName.isBlank()) {
+                Toast.makeText(this, "Select medicine first!", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            val input = EditText(this)
+            input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            input.hint = "Enter quantity"
+            AlertDialog.Builder(this)
+                .setTitle("Add New Stock")
+                .setMessage("How much new stock for $medicineName?")
+                .setView(input)
+                .setPositiveButton("Add") { dialog, _ ->
+                    val addValue = input.text.toString().toFloatOrNull() ?: 0f
+                    if (addValue > 0f) {
+                        lastLoadedClosingBalance += addValue
+                        lastLoadedOpeningBalance += addValue
+                        textClosing.text = formatMedValue(medicineName, lastLoadedClosingBalance.toString())
+                        textOpening.text = formatMedValue(medicineName, lastLoadedOpeningBalance.toString())
+                        db.addOrUpdateMedicine(
+                            defaultVehicle,
+                            medicineName,
+                            textOpening.text.toString(),
+                            editConsumption.text.toString(),
+                            editEmergency.text.toString(),
+                            textClosing.text.toString()
+                        )
+                        Toast.makeText(this, "Stock added successfully!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(this, "Quantity must be greater than 0.", Toast.LENGTH_SHORT).show()
+                    }
+                    dialog.dismiss()
+                }
+                .setNegativeButton("Cancel", null)
+                .show()
+        }
+
+        // Vehicle select logic
         if (defaultVehicle.isBlank()) {
-            showVehicleSelectDialog(prefs, vehicleSpinner)
+            showVehicleSelectDialog(prefs, vehicleSpinner, editEmergency, textEmergencyLabel)
         } else {
             val index = vehicleList.indexOf(defaultVehicle)
             vehicleSpinner.setSelection(if (index >= 0) index else 0)
             vehicleSpinner.isEnabled = false
-        }
-
-        // Summary se agar edit mode mein aaye ho to form fields fill karo
-        intent?.let {
-            if (it.getBooleanExtra("editMode", false)) {
-                val vehicleName = it.getStringExtra("vehicleName") ?: defaultVehicle
-                val medicineName = it.getStringExtra("medicineName") ?: ""
-                val opening = it.getStringExtra("openingBalance") ?: ""
-                val consumption = it.getStringExtra("consumption") ?: ""
-                val emergency = it.getStringExtra("totalEmergency") ?: ""
-                val closing = it.getStringExtra("closingBalance") ?: ""
-
-                val index = vehicleList.indexOf(vehicleName)
-                vehicleSpinner.setSelection(if (index >= 0) index else 0)
-                vehicleSpinner.isEnabled = false
-
-                medicineEdit.setText(medicineName)
-                editOpening.setText(opening)
-                editConsumption.setText(consumption)
-                editEmergency.setText(emergency)
-                editClosing.setText(closing)
-            }
-        }
-
-        // Date picker
-        editDate.isFocusable = false
-        editDate.setOnClickListener {
-            val calendar = Calendar.getInstance()
-            val datePicker = DatePickerDialog(
-                this,
-                { _, year, month, dayOfMonth ->
-                    val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-                    calendar.set(year, month, dayOfMonth)
-                    editDate.setText(sdf.format(calendar.time))
-                },
-                calendar.get(Calendar.YEAR),
-                calendar.get(Calendar.MONTH),
-                calendar.get(Calendar.DAY_OF_MONTH)
-            )
-            datePicker.show()
+            db.prepopulateMedicinesForVehicle(defaultVehicle, FormConstants.medicineList)
+            updateEmergencyVisibility(editEmergency, textEmergencyLabel, defaultVehicle, layoutStoreIssued)
         }
 
         // Medicine picker
@@ -169,51 +141,306 @@ class FormActivity : AppCompatActivity() {
             showMedicineDialog(medicineEdit)
         }
 
-        btnSubmit.setOnClickListener {
-            val vehicleName = prefs.getString("default_vehicle", "") ?: ""
+        // Load Store Issued on medicine change
+        fun loadStoreIssued(medicine: String) {
+            val data = db.getAllMedicines().find { it.vehicleName == defaultVehicle && it.medicineName == medicine }
+            textStoreIssued.text = data?.storeIssued ?: "0"
+        }
+        medicineEdit.addTextChangedListener {
             val medicineName = medicineEdit.text.toString()
-            val opening = editOpening.text.toString()
-            val consumption = editConsumption.text.toString()
-            val emergency = editEmergency.text.toString()
-            val closing = editClosing.text.toString()
+            if (medicineName.isNotBlank()) {
+                loadMedicineStock(medicineName, textOpening, textClosing, editConsumption, editEmergency)
+                loadStoreIssued(medicineName)
+            }
+        }
 
-            Log.d("FormSubmit", "vehicle=$vehicleName medicine=$medicineName opening=$opening consumption=$consumption emergency=$emergency closing=$closing")
+        // Store Issued dialog logic
+        textStoreIssued.setOnClickListener {
+            if (defaultVehicle == "RS-01") {
+                val medName = medicineEdit.text.toString()
+                if (medName.isBlank()) {
+                    Toast.makeText(this, "Pehle medicine select karein!", Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                val input = EditText(this)
+                input.inputType = android.text.InputType.TYPE_CLASS_NUMBER
+                input.hint = "Enter issued value"
+                if (textStoreIssued.text.toString() == "0") {
+                    input.setText("")
+                } else {
+                    input.setText(textStoreIssued.text.toString())
+                }
+                AlertDialog.Builder(this)
+                    .setTitle("Store Issued")
+                    .setMessage("Set issued value for $medName:")
+                    .setView(input)
+                    .setPositiveButton("Save") { dialog, _ ->
+                        val value = input.text.toString().toIntOrNull() ?: 0
+                        db.updateStoreIssued(defaultVehicle, medName, value.toString())
+                        textStoreIssued.text = value.toString()
+                        Toast.makeText(this, "Store Issued value updated!", Toast.LENGTH_SHORT).show()
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
 
+        // Consumption field update
+        editConsumption.addTextChangedListener {
+            val consumption = editConsumption.text.toString().toFloatOrNull() ?: 0f
+            val closingBalanceFloat = lastLoadedClosingBalance
+            if (closingBalanceFloat == 0f && consumption > 0f) {
+                Toast.makeText(this, "Bhai, pehle stock issue karwao, phir consumption kar sakte ho.", Toast.LENGTH_LONG).show()
+                editConsumption.setText("0")
+                textClosing.text = "0"
+                return@addTextChangedListener
+            }
+            val newClosing = closingBalanceFloat - consumption
+            val medicineName = medicineEdit.text.toString()
+            textClosing.text = formatMedValue(medicineName, newClosing.toString())
+        }
+        val snackbar = Snackbar.make(binding.root, "Weak or No internet connection", Snackbar.LENGTH_INDEFINITE)
+        snackbar(snackbar)
+        lifecycleScope.launch {
+            observeNetworkConnectivity(snackbar,applicationContext).collect { isConnected ->
+                if (isConnected) {
+                    // Internet is available
+                    snackbar.dismiss()
+                } else {
+                    // No internet access (even if connected to a network)
+                    snackbar.show()
+                }
+            }
+        }
+        btnSubmit.setOnClickListener {
+            val vehicleName = defaultVehicle
+            val medicineName = medicineEdit.text.toString()
+            val opening = textOpening.text.toString()
+            val inputConsumption = editConsumption.text.toString()
+            val inputEmergency = editEmergency.text.toString()
+            val closing = textClosing.text.toString()
+
+            // Check: Consumption must not be blank or "0"
+            if (inputConsumption.isBlank() || inputConsumption == "0" || inputConsumption == "0.0") {
+                AlertDialog.Builder(this)
+                    .setTitle("Missing Consumption")
+                    .setMessage("Consumption ki value enter karein!")
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@setOnClickListener
+            }
+
+            // Always zero for RS-01, otherwise user input
+            val consumption = if (defaultVehicle == "RS-01") 0f else inputConsumption.toFloatOrNull() ?: 0f
+            val emergency = if (defaultVehicle == "RS-01") 0 else inputEmergency.toIntOrNull() ?: 0
+
+            // 1. Stock zero check
+            val closingBalanceFloat = closing.toFloatOrNull() ?: 0f
+            if (closingBalanceFloat == 0f && consumption > 0f) {
+                Toast.makeText(this, "Bhai, pehle stock issue karwao, phir consumption kar sakte ho.", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
+
+            // 2. Required fields check
             if (vehicleName.isBlank() || medicineName.isBlank() ||
-                opening.isBlank() || consumption.isBlank() || emergency.isBlank() || closing.isBlank()
+                (defaultVehicle != "RS-01" && (inputConsumption.isBlank() || inputEmergency.isBlank()))
             ) {
-                errorText.text = "All fields are required"
-            } else if (
-                listOf(opening, consumption, emergency, closing).any { it.toFloatOrNull() == null }
+                errorText.text = "consumption & emergency fields are required"
+                return@setOnClickListener
+            }
+
+            // 3. Numeric validation
+            if (listOf(opening, closing).any { it.toFloatOrNull() == null } ||
+                (defaultVehicle != "RS-01" && (inputConsumption.toFloatOrNull() == null || inputEmergency.toIntOrNull() == null))
             ) {
                 errorText.text = "Numeric fields must be numbers"
-            } else {
-                errorText.text = ""
-                db.addOrUpdateMedicine(vehicleName, medicineName, opening, consumption, emergency, closing)
-                Toast.makeText(this, "Saved locally! Upload when ready.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
             }
+
+            // 4. Business Rule: Only check for other vehicles, skip for RS-01
+            if (defaultVehicle != "RS-01") {
+                if (consumption == 0f || emergency == 0) {
+                    val msg = when {
+                        consumption > 0f && emergency == 0 -> "Bhai, jab consumption likho to total emergency bhi likhna zaroori hai!"
+                        emergency > 0 && consumption == 0f -> "Bhai, jab emergency likho to total consumption bhi likhna zaroori hai!"
+                        emergency == 0 && consumption == 0f -> "Bhai, emergency & consumption likhna zaroori hai!"
+                        else -> "Fields required!"
+                    }
+                    AlertDialog.Builder(this)
+                        .setTitle("Validation Error")
+                        .setMessage(msg)
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return@setOnClickListener
+                }
+            }
+
+            errorText.text = ""
+
+            // --- For RS-01 always save 0, for others add previous values ---
+            val oldData = db.getAllMedicines().find { it.vehicleName == vehicleName && it.medicineName == medicineName }
+            val oldConsumption = oldData?.consumption?.toFloatOrNull() ?: 0f
+            val oldEmergency = oldData?.totalEmergency?.toIntOrNull() ?: 0
+
+            val sumConsumption = if (defaultVehicle == "RS-01") 0f else oldConsumption + (inputConsumption.toFloatOrNull() ?: 0f)
+            val sumEmergency = if (defaultVehicle == "RS-01") 0 else oldEmergency + (inputEmergency.toIntOrNull() ?: 0)
+
+            db.addOrUpdateMedicine(
+                vehicleName,
+                medicineName,
+                opening,
+                sumConsumption.toString(),
+                sumEmergency.toString(),
+                closing
+            )
+
+            lastLoadedClosingBalance = closing.toFloatOrNull() ?: lastLoadedClosingBalance
+
+            AlertDialog.Builder(this)
+                .setTitle("Saved")
+                .setMessage("Saved locally! Upload when ready.")
+                .setPositiveButton("OK", null)
+                .show()
+            editConsumption.setText("")
+            editEmergency.setText("")
         }
 
         btnSummary.setOnClickListener {
             val intent = Intent(this, SummaryActivity::class.java)
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         }
     }
-
-    private fun showVehicleSelectDialog(prefs: android.content.SharedPreferences, vehicleSpinner: Spinner) {
+    private fun showAlertDialog() {
+        if (!isFinishing && !isDestroyed) {
+            alertDialog = AlertDialog.Builder(this)
+                .setTitle("No Internet Connection")
+                .setMessage("Please connect to continue.")
+                .setCancelable(false)
+                .setPositiveButton("Exit") { _, _ -> showAlertDialog() }
+                .show()
+        }
+    }
+    private fun showVehicleSelectDialog(
+        prefs: android.content.SharedPreferences,
+        vehicleSpinner: Spinner,
+        editEmergency: EditText,
+        textEmergencyLabel: TextView
+    ) {
         val builder = AlertDialog.Builder(this)
         builder.setTitle("Apni Vehicle Select Karein")
         builder.setCancelable(false)
         builder.setSingleChoiceItems(vehicleList.toTypedArray(), -1) { dialog, which ->
             val selected = vehicleList[which]
-            prefs.edit().putString("default_vehicle", selected).apply()
-            defaultVehicle = selected
-            val index = vehicleList.indexOf(defaultVehicle)
-            vehicleSpinner.setSelection(if (index >= 0) index else 0)
-            vehicleSpinner.isEnabled = false
-            dialog.dismiss()
+            if (selected == "RS-01") {
+                // Password dialog
+                val passwordInput = EditText(this)
+                passwordInput.inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD
+                passwordInput.hint = "Enter password"
+                AlertDialog.Builder(this)
+                    .setTitle("Password Required")
+                    .setMessage("RS-01 select karne ke liye password enter karein.")
+                    .setView(passwordInput)
+                    .setPositiveButton("OK") { passDialog, _ ->
+                        val password = passwordInput.text.toString()
+                        if (password == "FDR-1049*") {
+                            prefs.edit().putString("default_vehicle", selected).apply()
+                            defaultVehicle = selected
+                            val index = vehicleList.indexOf(defaultVehicle)
+                            vehicleSpinner.setSelection(if (index >= 0) index else 0)
+                            vehicleSpinner.isEnabled = false
+                            db.prepopulateMedicinesForVehicle(selected, FormConstants.medicineList)
+                            updateEmergencyVisibility(editEmergency, textEmergencyLabel, defaultVehicle, layoutStoreIssued)
+                            dialog.dismiss()
+                        } else {
+                            AlertDialog.Builder(this)
+                                .setTitle("Wrong Password")
+                                .setMessage("Password ghalat hai. Dobara try karein.")
+                                .setPositiveButton("OK") { _, _ ->
+                                    showVehicleSelectDialog(prefs, vehicleSpinner, editEmergency, textEmergencyLabel)
+                                }
+                                .show()
+                            passDialog.dismiss()
+                            dialog.dismiss()
+                        }
+                    }
+                    .setNegativeButton("Cancel") { passDialog, _ ->
+                        showVehicleSelectDialog(prefs, vehicleSpinner, editEmergency, textEmergencyLabel)
+                        passDialog.dismiss()
+                        dialog.dismiss()
+                    }
+                    .show()
+            } else {
+                prefs.edit().putString("default_vehicle", selected).apply()
+                defaultVehicle = selected
+                val index = vehicleList.indexOf(defaultVehicle)
+                vehicleSpinner.setSelection(if (index >= 0) index else 0)
+                vehicleSpinner.isEnabled = false
+                db.prepopulateMedicinesForVehicle(selected, FormConstants.medicineList)
+                updateEmergencyVisibility(
+                    editEmergency,
+                    textEmergencyLabel,
+                    defaultVehicle,
+                    layoutStoreIssued
+                )
+                dialog.dismiss()
+            }
         }
         builder.show()
+    }
+
+    private fun updateEmergencyVisibility(
+        editEmergency: EditText,
+        textEmergencyLabel: TextView,
+        vehicle: String,
+        layoutStoreIssued: LinearLayout
+    ) {
+        if (vehicle == "RS-01") {
+            editEmergency.visibility = View.GONE
+            textEmergencyLabel.visibility = View.GONE
+            layoutStoreIssued.visibility = View.VISIBLE
+        } else {
+            editEmergency.visibility = View.VISIBLE
+            textEmergencyLabel.visibility = View.VISIBLE
+            layoutStoreIssued.visibility = View.GONE
+        }
+    }
+
+    private fun loadMedicineStock(
+        medicineName: String,
+        textOpening: TextView,
+        textClosing: TextView,
+        editConsumption: EditText,
+        editEmergency: EditText
+    ) {
+        val medData = db.getAllMedicines().find { it.vehicleName == defaultVehicle && it.medicineName == medicineName }
+        if (medData != null) {
+            lastLoadedOpeningBalance = medData.openingBalance.toFloatOrNull() ?: 0f
+            lastLoadedClosingBalance = medData.closingBalance.toFloatOrNull() ?: 0f
+            textOpening.text = formatMedValue(medicineName, medData.openingBalance)
+            textClosing.text = formatMedValue(medicineName, medData.closingBalance)
+            editConsumption.setText("")
+            if (defaultVehicle != "RS-01") editEmergency.setText("0")
+        } else {
+            lastLoadedOpeningBalance = 0f
+            lastLoadedClosingBalance = 0f
+            textOpening.text = ""
+            textClosing.text = ""
+            editConsumption.setText("")
+            if (defaultVehicle != "RS-01") editEmergency.setText("")
+        }
+    }
+    private fun getShiftTag(): String? {
+        val now = Calendar.getInstance()
+        val hour = now.get(Calendar.HOUR_OF_DAY)
+        return when {
+            hour in 8 until 15 -> "Morning"
+            hour in 15 until 22 -> "Evening"
+            hour in 22..23 -> "Night"
+            hour in 0 until 8 -> "Early Morning"
+            else -> null // Should never happen, but just in case
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu?): Boolean {
@@ -224,18 +451,31 @@ class FormActivity : AppCompatActivity() {
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         if (item.itemId == R.id.action_upload) {
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
-            if (db.checkUploadFlag(today)) {
+            val shift = getShiftTag()
+            val uploadKey = "${today}_${defaultVehicle}_$shift"
+            val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+
+            // Check if this shift+date+vehicle already uploaded
+            if (prefs.getBoolean(uploadKey, false)) {
                 AlertDialog.Builder(this)
                     .setTitle("Already Uploaded")
-                    .setMessage("Aap aaj ka data upload kar chuke hain. Kal try karein.")
+                    .setMessage("Aap is shift ka data upload kar chuke hain. Agli shift me upload karein.")
                     .setPositiveButton("OK", null)
                     .show()
             } else {
+                val allMedicines = db.getAllMedicines()
+                if (allMedicines.isEmpty()) {
+                    AlertDialog.Builder(this)
+                        .setTitle("Database Empty")
+                        .setMessage("Aap ka database khali hai, upload nahi ho sakta.")
+                        .setPositiveButton("OK", null)
+                        .show()
+                    return true
+                }
                 AlertDialog.Builder(this)
                     .setTitle("Upload Warning")
-                    .setMessage("Yeh data 1 din me sirf 1 dafa send ho sakta hai. Upload hone ke baad data delete/edit nahi ho sakta. Continue?")
+                    .setMessage("Yeh data aik shift me sirf 1 dafa send ho sakta hai. Upload hone ke baad data delete/edit nahi ho sakta. Continue?")
                     .setPositiveButton("Upload") { _, _ ->
-                        val allMedicines = db.getAllMedicines()
                         val progress = ProgressDialog(this)
                         progress.setMessage("Uploading to Google Sheet...")
                         progress.setCancelable(false)
@@ -244,7 +484,8 @@ class FormActivity : AppCompatActivity() {
                             val result = GoogleSheetApi.bulkUpload(today, allMedicines)
                             progress.dismiss()
                             if (result.isSuccess) {
-                                db.setUploadFlag(today)
+                                prefs.edit().putBoolean(uploadKey, true).apply()
+                                db.resetConsumptionAndEmergency()
                                 Toast.makeText(this@FormActivity, "Upload successful!", Toast.LENGTH_LONG).show()
                             } else {
                                 Toast.makeText(this@FormActivity, "Upload failed: " + result.exceptionOrNull()?.message, Toast.LENGTH_LONG).show()
@@ -258,6 +499,12 @@ class FormActivity : AppCompatActivity() {
             return true
         }
         return super.onOptionsItemSelected(item)
+    }
+
+    private fun formatMedValue(medicineName: String, value: String?): String {
+        val isSpecial = specialDecimalMeds.contains(medicineName.trim())
+        val doubleValue = value?.toDoubleOrNull() ?: 0.0
+        return if (isSpecial) "%.2f".format(doubleValue) else doubleValue.toInt().toString()
     }
 
     private fun showMedicineDialog(editMedicine: EditText) {
@@ -284,5 +531,25 @@ class FormActivity : AppCompatActivity() {
             dialog.dismiss()
         }
         dialog.show()
+    }
+}
+
+fun rollOverBalancesIfDateChanged(context: Context, db: AppDatabase) {
+    val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    val lastDate = prefs.getString("last_rollover_date", null)
+    val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+    if (lastDate != today) {
+        val allMeds = db.getAllMedicines()
+        for (item in allMeds) {
+            db.addOrUpdateMedicine(
+                item.vehicleName,
+                item.medicineName,
+                item.closingBalance, // opening = last closing
+                "0", // consumption
+                "0", // emergency
+                item.closingBalance // closing = opening (NOT ZERO)
+            )
+        }
+        prefs.edit().putString("last_rollover_date", today).apply()
     }
 }

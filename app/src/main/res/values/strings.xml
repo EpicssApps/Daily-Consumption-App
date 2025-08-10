@@ -3,4 +3,19 @@
     <string name="medicineName"><![CDATA[Select Medicine & Surgical Item]]></string>
     <string name="Update">Check Updates</string>
     <string name="updateNow">Update Now</string>
+    <string name="date">Date</string>
+    <string name="select_date">Select Date</string>
+    <string name="vehicle_name">Vehicle Name</string>
+    <string name="medicine_name">Medicine Name</string>
+    <string name="select_medicine">Select Medicine</string>
+    <string name="opening_balance">Opening Balance</string>
+    <string name="enter_opening_balance">Read Only</string>
+    <string name="consumption">Consumption</string>
+    <string name="enter_consumption">Enter Consumption</string>
+    <string name="total_emergency">Total Emergency</string>
+    <string name="enter_total_emergency">Enter Total Emergency</string>
+    <string name="closing_balance">Closing Balance</string>
+    <string name="enter_closing_balance">Read Only</string>
+    <string name="save">Save</string>
+    <string name="summary">Summary</string>
 </resources>

@@ -35,6 +35,7 @@
             android:id="@+id/text_opening"
             android:layout_width="0dp"
             android:layout_weight="1"
+            android:gravity="center"
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:textColor="#fff"/>
@@ -43,6 +44,7 @@
             android:id="@+id/text_consumption"
             android:layout_width="0dp"
             android:layout_weight="1"
+            android:gravity="center"
             android:layout_height="wrap_content"
             android:textSize="12sp"
             android:textColor="#fff"/>
@@ -53,6 +55,7 @@
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:textSize="12sp"
+            android:gravity="center"
             android:textColor="#fff"/>
 
         <TextView
@@ -61,10 +64,44 @@
             android:layout_weight="1"
             android:layout_height="wrap_content"
             android:textSize="12sp"
+            android:gravity="center"
+            android:textColor="#fff"/>
+
+        <TextView
+            android:id="@+id/text_store_issued"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:textSize="12sp"
+            android:gravity="center"
             android:textColor="#fff"/>
     </LinearLayout>
 
-    <!-- Divider Line -->
+    <!-- Invisible placeholders for labels to avoid code error -->
+    <LinearLayout
+        android:orientation="horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/labelConsumption"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Consumption"
+            android:textSize="10sp"
+            android:textColor="#fff" />
+
+        <TextView
+            android:id="@+id/labelEmergency"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Emergency"
+            android:textSize="10sp"
+            android:textColor="#fff" />
+    </LinearLayout>
     <View
         android:layout_width="match_parent"
         android:layout_height="1dp"

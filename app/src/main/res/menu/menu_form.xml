@@ -4,5 +4,5 @@
         android:id="@+id/action_upload"
         android:title="Upload to Google Sheet"
         android:icon="@android:drawable/ic_menu_upload"
-        app:showAsAction="always" />
+        app:showAsAction="ifRoom|withText" />
 </menu>
