@@ -25,23 +25,34 @@ class CompiledSummaryAdapter(
         return CompiledSummaryViewHolder(binding)
     }
 
+    // Format value for display (show "0" for all zero values)
+    fun formatValue(medicineName: String, value: Double): String {
+        return if (medicineName.trim().equals("Examination Gloves", ignoreCase = true)) {
+            val pairValue = (value / 2).toInt() // decimal part ignore, sirf integer
+            pairValue.toString()
+        } else {
+            if (value == 0.0) {
+                "0"
+            } else if (value % 1.0 == 0.0) {
+                value.toInt().toString()
+            } else {
+                String.format("%.2f", value)
+            }
+        }
+    }
+
     override fun onBindViewHolder(holder: CompiledSummaryViewHolder, position: Int) {
         val item = items[position]
-        val isSpecial = specialDecimalMeds.contains(item.medicineName.trim())
-
-        fun formatValue(value: Double): String {
-            return if (isSpecial) "%.2f".format(value) else value.toInt().toString()
-        }
 
         with(holder.binding) {
             tvSerial.text = (itemCount - position).toString()
             tvDate.text = item.date
             tvMedicine.text = item.medicineName
-            tvOpening.text = formatValue(item.totalOpening)
-            tvConsumption.text = formatValue(item.totalConsumption)
+            tvOpening.text = formatValue(item.medicineName, item.totalOpening)
+            tvConsumption.text = formatValue(item.medicineName, item.totalConsumption)
             tvEmergency.text = item.totalEmergency.toInt().toString()
-            tvClosing.text = formatValue(item.totalClosing)
-            tvStoreIssued.text = formatValue(item.totalStoreIssued)
+            tvClosing.text = formatValue(item.medicineName, item.totalClosing)
+            tvStoreIssued.text = formatValue(item.medicineName, item.totalStoreIssued)
             tvStockAvailable.text = item.stockAvailable
 
             btnDelete.setOnClickListener {

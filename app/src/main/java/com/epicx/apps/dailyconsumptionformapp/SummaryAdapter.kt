@@ -42,26 +42,21 @@ class SummaryAdapter(
         // Apply formatting to all numerical values
         holder.binding.textOpening.text = formatValue(item.openingBalance)
         holder.binding.textClosing.text = formatValue(item.closingBalance)
+        holder.binding.textConsumption.text = formatValue(item.consumption)
+        holder.binding.textEmergency.text = item.totalEmergency
 
+        // Always show consumption and emergency columns for RS-01 and all other vehicles
+        holder.binding.textConsumption.visibility = View.VISIBLE
+        holder.binding.textEmergency.visibility = View.VISIBLE
+        holder.binding.labelConsumption.visibility = View.VISIBLE
+        holder.binding.labelEmergency.visibility = View.VISIBLE
+
+        // Show StoreIssued only for RS-01, hide for others
         if (item.vehicleName == "RS-01") {
             holder.binding.textStoreIssued.visibility = View.VISIBLE
             holder.binding.textStoreIssued.text = formatValue(item.storeIssued)
         } else {
             holder.binding.textStoreIssued.visibility = View.GONE
-        }
-
-        if (onlyShowBasicColumns) {
-            holder.binding.textConsumption.visibility = View.GONE
-            holder.binding.textEmergency.visibility = View.GONE
-            holder.binding.labelConsumption.visibility = View.GONE
-            holder.binding.labelEmergency.visibility = View.GONE
-        } else {
-            holder.binding.textConsumption.visibility = View.VISIBLE
-            holder.binding.textEmergency.visibility = View.VISIBLE
-            holder.binding.labelConsumption.visibility = View.VISIBLE
-            holder.binding.labelEmergency.visibility = View.VISIBLE
-            holder.binding.textConsumption.text = formatValue(item.consumption)
-            holder.binding.textEmergency.text = item.totalEmergency
         }
 
         holder.binding.root.setOnClickListener {

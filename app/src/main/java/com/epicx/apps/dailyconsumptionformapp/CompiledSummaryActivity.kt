@@ -12,6 +12,22 @@ class CompiledSummaryActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private lateinit var adapter: CompiledSummaryAdapter
 
+    // Universal formatting function for all value display and WebView
+    private fun formatValue(medicineName: String, value: Double): String {
+        return if (medicineName.trim().equals("Examination Gloves", ignoreCase = true)) {
+            val pairValue = (value / 2).toInt() // Only integer part, ignore decimal
+            pairValue.toString()
+        } else {
+            if (value == 0.0) {
+                "0"
+            } else if (value % 1.0 == 0.0) {
+                value.toInt().toString()
+            } else {
+                String.format("%.2f", value)
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityCompiledSummaryBinding.inflate(layoutInflater)
@@ -31,12 +47,12 @@ class CompiledSummaryActivity : AppCompatActivity() {
                 val intent = Intent(this, WebViewActivity::class.java)
                 intent.putExtra("medicineName", item.medicineName)
                 intent.putExtra("date", item.date)
-                intent.putExtra("opening", item.totalOpening)
-                intent.putExtra("consumption", item.totalConsumption)
-                intent.putExtra("emergency", item.totalEmergency)
-                intent.putExtra("closing", item.totalClosing)
-                intent.putExtra("storeIssued", item.totalStoreIssued)
-                intent.putExtra("stockAvailable", item.stockAvailable)
+                intent.putExtra("opening", formatValue(item.medicineName, item.totalOpening))
+                intent.putExtra("consumption", formatValue(item.medicineName, item.totalConsumption))
+                intent.putExtra("emergency", item.totalEmergency.toInt().toString())
+                intent.putExtra("closing", formatValue(item.medicineName, item.totalClosing))
+                intent.putExtra("storeIssued", formatValue(item.medicineName, item.totalStoreIssued))
+                intent.putExtra("stockAvailable", item.stockAvailable) // Already string
                 startActivity(intent)
             }
         )

@@ -4,5 +4,11 @@
         android:id="@+id/action_upload"
         android:title="Upload to Google Sheet"
         android:icon="@android:drawable/ic_menu_upload"
-        app:showAsAction="ifRoom|withText" />
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_upload_rs01"
+        android:title="Monthly RS-01"
+        android:orderInCategory="100"
+        app:showAsAction="never" />
 </menu>

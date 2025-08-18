@@ -1,7 +1,7 @@
 <resources>
     <string name="app_name">Daily Consumption</string>
     <string name="medicineName"><![CDATA[Select Medicine & Surgical Item]]></string>
-    <string name="Update">Check Updates</string>
+    <string name="Update">Check WhatsApp Group</string>
     <string name="updateNow">Update Now</string>
     <string name="date">Date</string>
     <string name="select_date">Select Date</string>

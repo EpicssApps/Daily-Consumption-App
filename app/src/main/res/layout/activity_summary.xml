@@ -23,7 +23,14 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
-                android:text="Compile" />
+                android:text="Daily Consumption" />
+
+            <Button
+                android:id="@+id/btnMissingUploads"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="Missing Uploads" />
 
             <Button
                 android:id="@+id/btnCompiledSummary"
@@ -51,8 +58,22 @@
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
                 android:text="Import" />
+
+            <Button
+                android:id="@+id/btnMonthlyConsumption"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="Monthly Consumption" />
         </LinearLayout>
     </HorizontalScrollView>
+    <!-- activity_summary.xml me somewhere top par add karein -->
+    <SearchView
+        android:id="@+id/searchViewSummary"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:queryHint="Search Medicine..."
+        android:iconifiedByDefault="false" />
 
 
     <TextView

@@ -21,16 +21,15 @@ class WebViewActivity : AppCompatActivity() {
 
         val medicine = intent.getStringExtra("medicineName")
         val date = intent.getStringExtra("date")
-        val combineOpeningBalance = intent.getIntExtra("opening", 0)
-        val consumption = intent.getIntExtra("consumption", 0)
-        val emergency = intent.getIntExtra("emergency", 0)
-        val closing = intent.getIntExtra("closing", 0)
-        val storeIssuedMainStore = intent.getIntExtra("storeIssued", 0)
+        val combineOpeningBalance = intent.getStringExtra("opening")
+        val consumption = intent.getStringExtra("consumption")
+        val emergency = intent.getStringExtra("emergency")
+        val closing = intent.getStringExtra("closing")
+        val storeIssuedMainStore = intent.getStringExtra("storeIssued")
         val stockAvailableBeforeIssue = intent.getStringExtra("stockAvailable")
-
+        
         val tvMedicineName = findViewById<TextView>(R.id.tvMedicineName)
         tvMedicineName.text = medicine ?: "Medicine Name"
-        
 
         webView.settings.javaScriptEnabled = true
         webView.webViewClient = object : WebViewClient() {
