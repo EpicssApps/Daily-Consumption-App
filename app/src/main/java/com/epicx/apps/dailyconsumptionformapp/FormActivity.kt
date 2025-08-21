@@ -81,7 +81,7 @@ class FormActivity : AppCompatActivity() {
         val errorText = findViewById<TextView>(R.id.text_error)
         val btnSubmit = findViewById<Button>(R.id.btn_submit)
         val btnSummary = findViewById<Button>(R.id.btn_summary)
-        val btnAddStock = findViewById<Button>(R.id.btn_add_stock)
+        val btnSubmitDay = findViewById<Button>(R.id.btn_submit_day)
         val textEmergencyLabel = findViewById<TextView>(R.id.text_emergency_label)
         val textStoreIssued = findViewById<TextView>(R.id.text_store_issued)
         val issueToVehicles = findViewById<Button>(R.id.btnIssue)
@@ -113,21 +113,72 @@ class FormActivity : AppCompatActivity() {
             }
         }
 
-        btnAddStock.setOnClickListener {
-            AddStockHelper.showAddStockDialog(
-                activity = this,
-                db = db,
-                defaultVehicle = defaultVehicle,
-                medicineEdit = medicineEdit,
-                textOpening = textOpening,
-                textClosing = textClosing,
-                editConsumption = editConsumption,
-                editEmergency = editEmergency,
-                formatMedValue = ::formatMedValue,
-                getLastLoadedOpening = { lastLoadedOpeningBalance },
-                setLastLoadedOpening = { lastLoadedOpeningBalance = it },
-                getLastLoadedClosing = { lastLoadedClosingBalance },
-                setLastLoadedClosing = { lastLoadedClosingBalance = it })
+        btnSubmitDay.setOnClickListener {
+            if (defaultVehicle.isBlank()) {
+                Toast.makeText(this, "Please select vehicle first.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            // Collect all changed items for this vehicle
+            val all = db.getAllMedicines().filter { it.vehicleName == defaultVehicle }
+            val toSend = all.mapNotNull { rec ->
+                val cons = rec.consumption.toDoubleOrNull() ?: 0.0
+                val emerg = rec.totalEmergency.toDoubleOrNull() ?: 0.0
+                if (cons > 0.0 || emerg > 0.0) {
+                    GoogleSheetsClient.SubmitItem(
+                        medicine = rec.medicineName,
+                        consumption = cons,
+                        emergency = emerg
+                    )
+                } else null
+            }
+
+            if (toSend.isEmpty()) {
+                Toast.makeText(this, "No changes to submit.", Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+
+            val pd = ProgressDialog(this).apply {
+                setMessage("Submitting day data...")
+                setCancelable(false)
+                show()
+            }
+
+            GoogleSheetsClient.submitConsumption(defaultVehicle, toSend) { ok, resp ->
+                pd.dismiss()
+                if (!ok) {
+                    Toast.makeText(this, "Submit failed: ${resp?.error ?: "network error"}", Toast.LENGTH_LONG).show()
+                    return@submitConsumption
+                }
+                // Optional: reset local consumption/emergency after successful upload
+                toSend.forEach { item ->
+                    db.addOrUpdateMedicine(
+                        vehicle = defaultVehicle,
+                        medicine = item.medicine,
+                        opening = db.getMedicineOpening(defaultVehicle, item.medicine), // you may have your own getter; else pass existing opening
+                        consumption = "0",
+                        emergency = "0",
+                        closing = db.getMedicineClosing(defaultVehicle, item.medicine) // keep existing local closing
+                    )
+                }
+                // Refresh UI if a medicine is already selected
+                val medName = findViewById<EditText>(R.id.edit_medicine).text.toString()
+                if (medName.isNotBlank()) {
+                    MedicineStockUtils.loadMedicineStock(
+                        db = db,
+                        vehicleName = defaultVehicle,
+                        medicineName = medName,
+                        textOpening = findViewById(R.id.text_opening),
+                        textClosing = findViewById(R.id.text_closing),
+                        editConsumption = findViewById(R.id.edit_consumption),
+                        editEmergency = findViewById(R.id.edit_total_emergency),
+                        formatMedValue = ::formatMedValue,
+                        lastLoadedOpeningBalanceSetter = { lastLoadedOpeningBalance = it },
+                        lastLoadedClosingBalanceSetter = { lastLoadedClosingBalance = it }
+                    )
+                }
+                Toast.makeText(this, "Day submitted successfully!", Toast.LENGTH_LONG).show()
+            }
         }
 
         issueToVehicles.setOnClickListener {

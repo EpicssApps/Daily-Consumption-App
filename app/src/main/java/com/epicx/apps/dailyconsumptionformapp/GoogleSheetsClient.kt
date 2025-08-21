@@ -13,7 +13,8 @@ import java.util.concurrent.TimeUnit
 
 object GoogleSheetsClient {
 
-    private const val WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz01rn8i-QCM2PbV2xWrH__qjuIdmyj2VgtQWiV3TSAe0tERlWgnDPaGFfx4a0RpBOg_w/exec"
+    // NOTE: yahan apna deployed Web App URL use karein
+    private const val WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwiE9PYOCSCB-NwYMqIGcK2hGz0xrJ7PwW5P-Glb1DwrkoWziD_Q4FFK2cdlQhdqZTfuw/exec"
     private const val API_KEY = "8k4jd723lkdc723pos57"
 
     private val gson = Gson()
@@ -25,20 +26,39 @@ object GoogleSheetsClient {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    // RS-01 issuing flow (existing)
     data class MedQty(
         @SerializedName("medicine") val medicine: String,
         @SerializedName("qty") val qty: Int
     )
 
-    private data class Payload(
+    // Day submit (consume flow)
+    data class SubmitItem(
+        @SerializedName("medicine") val medicine: String,
+        @SerializedName("consumption") val consumption: Double,
+        @SerializedName("emergency") val emergency: Double
+    )
+
+    // Separate payloads to keep types clean
+    private data class IssuePayload(
         @SerializedName("vehicle") val vehicle: String,
         @SerializedName("items") val items: List<MedQty>,
-        @SerializedName("key") val key: String = API_KEY
+        @SerializedName("key") val key: String = API_KEY,
+        @SerializedName("mode") val mode: String? = null // excluded by Gson when null
+    )
+
+    private data class ConsumePayload(
+        @SerializedName("vehicle") val vehicle: String,
+        @SerializedName("items") val items: List<SubmitItem>,
+        @SerializedName("key") val key: String = API_KEY,
+        @SerializedName("mode") val mode: String = "consume"
     )
 
     data class UploadResponse(
         @SerializedName("ok") val ok: Boolean,
         @SerializedName("vehicle") val vehicle: String? = null,
+        // For 'issue' mode script returns 'from'/'to'
+        // For 'consume' mode script returns detailed fields, but we don't strictly rely on them
         @SerializedName("updated") val updated: List<UpdatedItem>? = null,
         @SerializedName("notFound") val notFound: List<NotFoundItem>? = null,
         @SerializedName("error") val error: String? = null
@@ -46,8 +66,9 @@ object GoogleSheetsClient {
 
     data class UpdatedItem(
         @SerializedName("medicine") val medicine: String,
-        @SerializedName("from") val from: Double?,
-        @SerializedName("to") val to: Double?
+        @SerializedName("from") val from: Double? = null,
+        @SerializedName("to") val to: Double? = null
+        // consume mode may send different keys; we are not strictly using them
     )
 
     data class NotFoundItem(
@@ -55,7 +76,7 @@ object GoogleSheetsClient {
         @SerializedName("reason") val reason: String?
     )
 
-    // NEW: Balances API models
+    // Balances API models
     data class BalanceRow(
         @SerializedName("medicine") val medicine: String,
         @SerializedName("opening") val opening: Double,
@@ -68,13 +89,14 @@ object GoogleSheetsClient {
         @SerializedName("error") val error: String? = null
     )
 
+    // RS-01: Upload issued quantities (closing += qty)
     fun uploadIssues(
         context: android.content.Context,
         vehicle: String,
         items: List<MedQty>,
         callback: (success: Boolean, response: UploadResponse?) -> Unit
     ) {
-        val payload = Payload(vehicle = vehicle, items = items)
+        val payload = IssuePayload(vehicle = vehicle, items = items)
         val body = RequestBody.create(jsonMedia, gson.toJson(payload))
 
         val req = Request.Builder()
@@ -104,7 +126,43 @@ object GoogleSheetsClient {
         })
     }
 
-    // NEW: fetch opening/closing balances for a vehicle
+    // Normal users: Submit day consumption (closing -= consumption, D/E += cumulative)
+    fun submitConsumption(
+        vehicle: String,
+        items: List<SubmitItem>,
+        callback: (success: Boolean, response: UploadResponse?) -> Unit
+    ) {
+        val payload = ConsumePayload(vehicle = vehicle, items = items)
+        val body = RequestBody.create(jsonMedia, gson.toJson(payload))
+
+        val req = Request.Builder()
+            .url(WEB_APP_URL)
+            .post(body)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("X-API-KEY", API_KEY)
+            .build()
+
+        http.newCall(req).enqueue(object : okhttp3.Callback {
+            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+                postToMain { callback(false, UploadResponse(ok = false, error = e.message)) }
+            }
+
+            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+                response.use { resp ->
+                    val bodyStr = resp.body?.string().orEmpty()
+                    val parsed = try {
+                        gson.fromJson(bodyStr, UploadResponse::class.java)
+                    } catch (t: Throwable) {
+                        UploadResponse(ok = false, error = "Invalid response")
+                    }
+                    val success = resp.isSuccessful && (parsed.ok)
+                    postToMain { callback(success, parsed) }
+                }
+            }
+        })
+    }
+
+    // Fetch opening/closing for selected vehicle (used at app start/vehicle switch)
     fun fetchBalances(
         vehicle: String,
         callback: (success: Boolean, response: BalancesResponse?) -> Unit

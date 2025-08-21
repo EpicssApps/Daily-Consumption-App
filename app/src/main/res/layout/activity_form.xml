@@ -220,13 +220,12 @@
             android:layout_marginTop="8dp"
             android:text="@string/summary" />
 
-        <!-- Add New Stock Button -->
         <Button
-            android:id="@+id/btn_add_stock"
+            android:id="@+id/btn_submit_day"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Add New Stock" />
+            android:text="Submit Consumption"
+            android:layout_marginTop="8dp" />
 
         <Button
             android:id="@+id/btnIssue"

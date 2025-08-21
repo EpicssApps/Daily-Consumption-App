@@ -103,6 +103,51 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         return list
     }
 
+    // NEW: Single-record getters to fix unresolved reference in FormActivity
+    fun getMedicineOpening(vehicle: String, medicine: String): String {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT openingBalance FROM medicines WHERE vehicleName=? AND medicineName=? LIMIT 1",
+            arrayOf(vehicle, medicine)
+        )
+        val value = if (cursor.moveToFirst()) cursor.getString(0) ?: "0" else "0"
+        cursor.close()
+        return value
+    }
+
+    fun getMedicineClosing(vehicle: String, medicine: String): String {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT closingBalance FROM medicines WHERE vehicleName=? AND medicineName=? LIMIT 1",
+            arrayOf(vehicle, medicine)
+        )
+        val value = if (cursor.moveToFirst()) cursor.getString(0) ?: "0" else "0"
+        cursor.close()
+        return value
+    }
+
+    // Optional helper (not required by FormActivity but handy)
+    fun getMedicineRecord(vehicle: String, medicine: String): FormData? {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT vehicleName, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued FROM medicines WHERE vehicleName=? AND medicineName=? LIMIT 1",
+            arrayOf(vehicle, medicine)
+        )
+        val item = if (cursor.moveToFirst()) {
+            FormData(
+                vehicleName = cursor.getString(0),
+                medicineName = cursor.getString(1),
+                openingBalance = cursor.getString(2),
+                consumption = cursor.getString(3),
+                totalEmergency = cursor.getString(4),
+                closingBalance = cursor.getString(5),
+                storeIssued = cursor.getString(6) ?: "0"
+            )
+        } else null
+        cursor.close()
+        return item
+    }
+
     fun checkUploadFlag(date: String): Boolean {
         val db = readableDatabase
         val cursor = db.rawQuery("SELECT uploaded FROM upload_flags WHERE date=?", arrayOf(date))
@@ -187,7 +232,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
 
     //----------- Compiled Summary CRUD ------------
 
-    // Data class for CompiledMedicineData (put this in a separate file in practice)
     data class CompiledMedicineData(
         val medicineName: String,
         val totalConsumption: Double,
@@ -206,7 +250,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         val db = writableDatabase
         db.execSQL("DELETE FROM medicines WHERE vehicleName=? AND medicineName=?", arrayOf(vehicleName, medicineName))
     }
-    // Insert compiled summary list for a date
     fun insertCompiledSummary(
         date: String,
         items: List<CompiledMedicineData>
@@ -235,7 +278,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         }
     }
 
-    // Get all compiled summary records
     fun getAllCompiledSummary(): List<CompiledMedicineDataWithId> {
         val db = readableDatabase
         val cursor = db.rawQuery(
@@ -261,7 +303,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         return list
     }
 
-    // Delete a compiled summary record by id
     fun deleteCompiledSummaryById(id: Int) {
         val db = writableDatabase
         db.execSQL("DELETE FROM compiled_summary WHERE id=?", arrayOf(id))
