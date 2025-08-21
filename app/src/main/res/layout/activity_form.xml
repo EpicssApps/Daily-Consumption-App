@@ -227,5 +227,12 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="Add New Stock" />
+
+        <Button
+            android:id="@+id/btnIssue"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Issue Medicine (RS1 only)" />
     </LinearLayout>
 </ScrollView>

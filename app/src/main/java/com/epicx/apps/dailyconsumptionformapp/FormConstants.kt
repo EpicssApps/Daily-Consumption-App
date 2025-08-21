@@ -6,6 +6,72 @@ object FormConstants {
         "BNA 25", "BNA 26", "BNA 29","RS-01"
     ) + (1..50).map { n -> "BNB %02d".format(n) }
 
+
+
+        val newMedicineList = listOf(
+            "Tab. Paracetamol 500 mg",
+            "Tab. Asprin 300 mg",
+            "Tab. Angised 0.5 mg",
+            "Inj. Hydrocortisone (250 mg)",
+            "Inj. Pheniramine Maleate (25 mg)",
+            "Ipratropium Bromide (20 ml)",
+            "Inj. Dimenhydrinate (50 mg / ml)",
+            "Inj. 25% Dextrose Water (20 ml)",
+            "Inj. Diazepam 10 mg",
+            "Tab. Captopril 25 mg",
+            "Inj. Ringer Lactate (500 ml)",
+            "Inj. Normal Saline (500/1000 ml)",
+            "Inj. Diclofenac sodium water based (75 mg / 3ml)",
+            "Povi-iodine Solution 10% (450 ml)",
+            "Polymyxin B Sulphate Skin (20 gm)",
+            "Lignocaine gel 2% (15 gm)",
+            "Surface Disinfectant Spray",
+            "Ethyl Chloride Spray (175 ml)",
+            "Silver Sulphadiazine Cream (50gm)",
+            "Airway 0",
+            "Airway 1",
+            "Airway 2",
+            "Airway 3",
+            "Airway 4",
+            "Airway 5",
+            "Laryngeal Mask Airway (LMA) 02",
+            "Laryngeal Mask Airway (LMA) 03",
+            "Laryngeal Mask Airway (LMA) 04",
+            "Alcohol Swabs",
+            "Disposable Syringes 05 ml",
+            "Disposable 20 ml",
+            "IV Cannula 18 No",
+            "IV Cannula 20 No",
+            "IV Cannula 22 No",
+            "IV Cannula 24 No",
+            "Drip Set",
+            "Intraosseous Needle",
+            "Cotton Bandages BPC 6.5 cm X 6 meter (2.5 inch)",
+            "Cotton Bandages BPC 10 cm X 6 meter (4 inch)",
+            "Cotton Bandages BPC 15 cm X 6 meter",
+            "Crape Bandage Size 04 inches x 4.5 meter",
+            "Sterilized Gauze Pieces 10 cm x 10 cm 1 box",
+            "Paper Adhesive Tape (1”)",
+            "Cotton Roll (500 gm)",
+            "Nelton Catheter (18 Gauge)",
+            "Nebulizer Mask with tubing (Small)",
+            "Nebulizer Mask with tubing (Large)",
+            "Adjustable Hard Cervical Collar with chin Support",
+            "Triangular Bandage (Medium)",
+            "Triangular Bandage (Large)",
+            "Compatible Lancets",
+            "Glucometer Active",
+            "Glucometer Strips Accu-Check Active",
+            "Glucometer Strips Accu-Check Instant",
+            "Glucometer Strips Accu-Check Performa",
+            "Glucometer Strips Medisign",
+            "Neomycin Sulphate 0.5%",
+            "Examination Gloves",
+            "Dead Body Sheets",
+            "Wooden Splints (Medium 3\"x36\")",
+            "Wooden Splints (Small 3\"x18)"
+        )
+
     val medicineList = listOf(
         "Tab. Paracetamol 500 mg",
         "Inj. Paracetamol 60 mg (Water based)",
@@ -82,6 +148,7 @@ object FormConstants {
         "Dead Body Sheets", "Wooden Splints (Small 3\"x18)", "Wooden Splints (Medium 3\"x36\")", "Rescue Working Gloves 10\"", "Alcohol Swab (200 No/Box)", "Duster Cloth", "Detergent powder (1 Kg) pack",
         "Hand Wash Soap", "Surface cleaner", "AFFF"
     )
+
     val monthlySskList = listOf(
         "Alcohol Swabs",
         "Burn Cream",

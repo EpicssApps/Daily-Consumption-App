@@ -30,7 +30,6 @@ import java.util.*
 import android.widget.SearchView
 import com.epicx.apps.dailyconsumptionformapp.objects.CsvExportUtils
 import com.epicx.apps.dailyconsumptionformapp.objects.MonthlyConsumptionHelper
-import kotlin.math.abs
 
 class SummaryActivity : AppCompatActivity() {
     private lateinit var binding: ActivitySummaryBinding
@@ -422,6 +421,12 @@ class SummaryActivity : AppCompatActivity() {
             })
         }
         summaryAdapter.notifyDataSetChanged()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        dataList = db.getAllMedicines()
+        filterList(binding.searchViewSummary.query.toString())
     }
 
     override fun onRequestPermissionsResult(

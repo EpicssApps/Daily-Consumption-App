@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent">
+    <LinearLayout
+        android:orientation="vertical" android:padding="16dp"
+        android:layout_width="match_parent" android:layout_height="wrap_content">
+
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Select Vehicle" android:textStyle="bold"/>
+
+        <Spinner
+            android:id="@+id/spVehicle"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Select Medicine" android:textStyle="bold" android:layout_marginTop="16dp"/>
+
+        <Spinner
+            android:id="@+id/spMedicine"
+            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+
+        <TextView
+            android:layout_width="wrap_content" android:layout_height="wrap_content"
+            android:text="Issue Quantity" android:textStyle="bold" android:layout_marginTop="16dp"/>
+
+        <EditText
+            android:id="@+id/etQty"
+            android:inputType="number"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:hint="e.g., 10"/>
+
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Save (Local)" android:layout_marginTop="16dp"/>
+
+        <Button
+            android:id="@+id/btnUpload"
+            android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:text="Upload to Google Sheet" android:layout_marginTop="24dp"/>
+
+        <!-- New: Pending summary area -->
+        <TextView
+            android:id="@+id/tvPendingTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Pending items"
+            android:textStyle="bold"
+            android:layout_marginTop="20dp"/>
+
+        <TextView
+            android:id="@+id/tvPendingList"
+            android:layout_width="match_parent"
+            android:layout_height="200dp"
+            android:background="#1Fffffff"
+            android:padding="12dp"
+            android:textColor="#ffffff"
+            android:scrollbars="vertical"
+            android:fadingEdgeLength="8dp"
+            android:overScrollMode="always"
+            android:textIsSelectable="false"
+            android:textSize="14sp"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="12dp"
+            android:gravity="top|start"
+            android:text="No pending items."/>
+    </LinearLayout>
+</ScrollView>

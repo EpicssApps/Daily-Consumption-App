@@ -8,7 +8,7 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.epicx.apps.dailyconsumptionformapp"
+        applicationId = "com.epicx.apps.dailyconsumptionformapp.online"
         minSdk = 24
         targetSdk = 36
         versionCode = 2
@@ -43,6 +43,7 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.moshi:moshi:1.15.1")
     implementation("com.squareup.moshi:moshi-kotlin:1.15.1")
+    implementation ("com.squareup.okhttp3:logging-interceptor:4.12.0")
     implementation("com.google.code.gson:gson:2.10.1")
     implementation ("org.jsoup:jsoup:1.21.1")
 

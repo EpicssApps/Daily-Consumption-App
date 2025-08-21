@@ -35,6 +35,10 @@
             android:theme="@style/Theme.SummaryActivity.NoActionBar"
             android:exported="false"/>
 
+        <activity android:name=".IssueMedicineActivity"
+            android:theme="@style/Theme.SummaryActivity.NoActionBar"
+            android:exported="false"/>
+
         <activity
             android:name=".SummaryActivity"
             android:theme="@style/Theme.SummaryActivity.NoActionBar"
