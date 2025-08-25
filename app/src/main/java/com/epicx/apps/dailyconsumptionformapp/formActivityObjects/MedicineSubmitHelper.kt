@@ -35,7 +35,7 @@ object MedicineSubmitHelper {
             closing: String
         ) -> Unit,
         formatMedValue: (medicineName: String, value: String) -> String,
-        onClosingRecalculated: (Float) -> Unit
+        onClosingRecalculated: (Int) -> Unit
     ) {
         val vehicleName = defaultVehicle
         val medicineName = medicineEdit.text.toString()
@@ -44,8 +44,7 @@ object MedicineSubmitHelper {
         val inputEmergency = editEmergency.text.toString()
         val uiClosing = textClosing.text.toString()
 
-        // 1) Consumption must not be blank or zero
-        if (inputConsumption.isBlank() || inputConsumption == "0" || inputConsumption == "0.0") {
+        if (inputConsumption.isBlank() || inputConsumption == "0") {
             AlertDialog.Builder(activity)
                 .setTitle("Missing Consumption")
                 .setMessage("Consumption ki value enter karein!")
@@ -54,16 +53,14 @@ object MedicineSubmitHelper {
             return
         }
 
-        // Parse user input
-        val consumption = inputConsumption.toFloatOrNull() ?: 0f
+        val consumption = inputConsumption.toIntOrNull() ?: 0
         val emergency = inputEmergency.toIntOrNull() ?: 0
 
-        // 2) Stock zero check using DB closing (before save)
         val dbRecord = getAllMedicines().find {
             it.vehicleName == vehicleName && it.medicineName == medicineName
         }
-        val currentDbClosing = dbRecord?.closingBalance?.toFloatOrNull() ?: 0f
-        if (currentDbClosing == 0f && consumption > 0f) {
+        val currentDbClosing = dbRecord?.closingBalance?.toDoubleOrNull()?.toInt() ?: 0
+        if (currentDbClosing == 0 && consumption > 0) {
             Toast.makeText(
                 activity,
                 "Bhai, pehle stock issue karwao, phir consumption kar sakte ho.",
@@ -72,7 +69,21 @@ object MedicineSubmitHelper {
             return
         }
 
-        // 3) Required fields
+        // ADDED: Only consumption limit check (emergency ignore)
+        if (consumption > currentDbClosing) {
+            AlertDialog.Builder(activity)
+                .setTitle("Insufficient Balance")
+                .setMessage(
+                    "Current Closing: $currentDbClosing\n" +
+                            "Entered Consumption: $consumption\n\n" +
+                            "Itna stock available nahi. Pehle balance barhaen ya consumption kam karein."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+        // END ADDED
+
         if (vehicleName.isBlank() || medicineName.isBlank()) {
             errorText.text = "Vehicle & medicine required"
             return
@@ -84,10 +95,9 @@ object MedicineSubmitHelper {
             }
         }
 
-        // 4) Numeric validation
         val numericInvalid =
-            listOf(opening, uiClosing).any { it.toFloatOrNull() == null } ||
-                    inputConsumption.toFloatOrNull() == null ||
+            listOf(opening, uiClosing).any { it.toDoubleOrNull() == null } ||
+                    inputConsumption.toIntOrNull() == null ||
                     (defaultVehicle != "RS-01" && inputEmergency.toIntOrNull() == null)
 
         if (numericInvalid) {
@@ -95,13 +105,12 @@ object MedicineSubmitHelper {
             return
         }
 
-        // 5) Business Rule for non RS-01
         if (defaultVehicle != "RS-01") {
-            if (consumption == 0f || emergency == 0) {
+            if (consumption == 0 || emergency == 0) {
                 val msg = when {
-                    consumption > 0f && emergency == 0 -> "Bhai, jab consumption likho to total emergency bhi likhna zaroori hai!"
-                    emergency > 0 && consumption == 0f -> "Bhai, jab emergency likho to total consumption bhi likhna zaroori hai!"
-                    emergency == 0 && consumption == 0f -> "Bhai, emergency & consumption likhna zaroori hai!"
+                    consumption > 0 && emergency == 0 -> "Bhai, jab consumption likho to total emergency bhi likhna zaroori hai!"
+                    emergency > 0 && consumption == 0 -> "Bhai, jab emergency likho to total consumption bhi likhna zaroori hai!"
+                    emergency == 0 && consumption == 0 -> "Bhai, emergency & consumption likhna zaroori hai!"
                     else -> "Fields required!"
                 }
                 AlertDialog.Builder(activity)
@@ -115,17 +124,14 @@ object MedicineSubmitHelper {
 
         errorText.text = ""
 
-        // Old data sums
-        val oldConsumption = dbRecord?.consumption?.toFloatOrNull() ?: 0f
+        val oldConsumption = dbRecord?.consumption?.toDoubleOrNull()?.toInt() ?: 0
         val oldEmergency = dbRecord?.totalEmergency?.toIntOrNull() ?: 0
         val sumConsumption = oldConsumption + consumption
         val sumEmergency = oldEmergency + emergency
 
-        // Recalculate closing from DB closing (not going below 0)
-        val recalculatedClosing = (currentDbClosing - consumption).coerceAtLeast(0f)
+        val recalculatedClosing = (currentDbClosing - consumption).coerceAtLeast(0)
         val closingToSave = formatMedValue(medicineName, recalculatedClosing.toString())
 
-        // Save to DB
         addOrUpdateMedicine(
             vehicleName,
             medicineName,
@@ -135,7 +141,6 @@ object MedicineSubmitHelper {
             closingToSave
         )
 
-        // Update state
         onClosingRecalculated(recalculatedClosing)
         textClosing.text = closingToSave
 
@@ -145,7 +150,6 @@ object MedicineSubmitHelper {
             .setPositiveButton("OK", null)
             .show()
 
-        // Clear inputs
         editConsumption.setText("")
         editEmergency.setText("")
     }

@@ -6,7 +6,7 @@ import android.app.AlertDialog
 import android.content.SharedPreferences
 import android.text.InputType
 import android.widget.*
-import com.epicx.apps.dailyconsumptionformapp.FormConstants
+import com.epicx.apps.dailyconsumptionformapp.FormConstants.newMedicineList
 
 object VehicleSelectHelper {
 
@@ -154,7 +154,7 @@ object VehicleSelectHelper {
         vehicleSpinner.isEnabled = false
 
         // Ensure medicines pre-populated
-        db.prepopulateMedicinesForVehicle(selected, FormConstants.medicineList)
+        db.prepopulateMedicinesForVehicle(selected, newMedicineList)
 
         // Update emergency/store issued visibility per vehicle
         updateEmergencyVisibilityInside(

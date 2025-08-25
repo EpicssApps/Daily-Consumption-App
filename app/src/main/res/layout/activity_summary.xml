@@ -26,13 +26,6 @@
                 android:text="Daily Consumption" />
 
             <Button
-                android:id="@+id/btnMissingUploads"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:text="Missing Uploads" />
-
-            <Button
                 android:id="@+id/btnCompiledSummary"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -46,25 +39,18 @@
                 android:text="SSK File" />
 
             <Button
-                android:id="@+id/btnExport"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:text="Export" />
-
-            <Button
-                android:id="@+id/btnImport"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:text="Import" />
-
-            <Button
                 android:id="@+id/btnMonthlyConsumption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
                 android:text="Monthly Consumption" />
+
+            <Button
+                android:id="@+id/btnRollover"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:text="Rollover Day" />
         </LinearLayout>
     </HorizontalScrollView>
     <!-- activity_summary.xml me somewhere top par add karein -->

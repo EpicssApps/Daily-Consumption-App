@@ -55,7 +55,6 @@ object MonthlyConsumptionHelper {
         DatePickerDialog(
             activity,
             { _, year, month0, _ ->
-                // Selected month range
                 val startCal = Calendar.getInstance().apply {
                     set(Calendar.YEAR, year)
                     set(Calendar.MONTH, month0)
@@ -77,9 +76,7 @@ object MonthlyConsumptionHelper {
                 progressView.visibility = View.VISIBLE
                 activity.lifecycleScope.launchWhenStarted {
                     try {
-                        // Heavy work off main thread
                         val rows: List<Row> = withContext(Dispatchers.IO) {
-                            // Build date list for the month
                             val dates = mutableListOf<String>()
                             val cursor = startCal.clone() as Calendar
                             while (!cursor.after(endCal)) {
@@ -87,10 +84,8 @@ object MonthlyConsumptionHelper {
                                 cursor.add(Calendar.DAY_OF_MONTH, 1)
                             }
 
-                            // Limit parallel calls to avoid hitting quotas
                             val semaphore = Semaphore(permits = 4)
 
-                            // Fetch all days (limited concurrency)
                             val results = coroutineScope {
                                 dates.map { dateStr ->
                                     async {
@@ -100,15 +95,13 @@ object MonthlyConsumptionHelper {
                                         }
                                     }
                                 }.awaitAll()
-                            }.sortedBy { it.first } // sort by date ascending
+                            }.sortedBy { it.first }
 
-                            // Aggregation structures
                             val sumConsumptionByKey = mutableMapOf<String, Double>()
                             var latestDateWithData: String? = null
                             val closingOnLatestDateByKey = mutableMapOf<String, Double>()
                             val displayNameByKey = mutableMapOf<String, String>()
 
-                            // Process results
                             for ((dateStr, result) in results) {
                                 if (result.isSuccess) {
                                     val rowsForDate = result.getOrNull().orEmpty()
@@ -116,7 +109,6 @@ object MonthlyConsumptionHelper {
                                         it.vehicleName.trim().equals(vehicleName, ignoreCase = true)
                                     }
                                     if (rsRows.isNotEmpty()) {
-                                        // Monthly sum
                                         for (r in rsRows) {
                                             val medName = r.medicineName.trim()
                                             val key = keyOf(medName)
@@ -126,7 +118,6 @@ object MonthlyConsumptionHelper {
                                                 displayNameByKey[key] = medName
                                             }
                                         }
-                                        // Track latest available date with closings
                                         if (latestDateWithData == null || dateStr > latestDateWithData!!) {
                                             latestDateWithData = dateStr
                                             closingOnLatestDateByKey.clear()
@@ -135,7 +126,7 @@ object MonthlyConsumptionHelper {
                                                 val key = keyOf(medName)
                                                 val closing = cleanDouble(r.closingBalance)
                                                 closingOnLatestDateByKey[key] = closing
-                                                displayNameByKey[key] = medName // prefer latest label
+                                                displayNameByKey[key] = medName
                                             }
                                         }
                                     }
@@ -150,7 +141,7 @@ object MonthlyConsumptionHelper {
                                     val name = displayNameByKey[key] ?: key
                                     val sumCons = sumConsumptionByKey[key] ?: 0.0
                                     val lastClosing = closingOnLatestDateByKey[key] ?: 0.0
-                                    val totalConsOut = if (sumCons == 0.0) 0.0 else abs(sumCons - lastClosing)
+                                    val totalConsOut = if (sumCons == 0.0) 0.0 else kotlin.math.abs(sumCons - lastClosing)
                                     Row(name, totalConsOut, lastClosing)
                                 }.sortedBy { it.medicineName.lowercase(Locale.ROOT) }
                             }
@@ -169,31 +160,28 @@ object MonthlyConsumptionHelper {
             },
             now.get(Calendar.YEAR),
             now.get(Calendar.MONTH),
-            1 // day ignored
+            1
         ).apply {
             setTitle("Select Month & Year")
         }.show()
     }
-
 
     private fun showDialogAndShare(
         activity: AppCompatActivity,
         rows: List<Row>,
         monthLabel: String
     ) {
-        // Arrange output rows according to monthlyOrderConsumptionList order
         val exportOrder = FormConstants.monthlyOrderConsumptionList
         val orderedRows = exportOrder.map { medName ->
             rows.find { it.medicineName.trim().equals(medName.trim(), ignoreCase = true) }
                 ?: Row(medName, 0.0, 0.0)
         }
 
-        // Dialog output
         val builder = AlertDialog.Builder(activity)
         val sb = StringBuilder()
         sb.append("Medicine, totalConsumption, Stock Balance\n")
         orderedRows.forEach { r ->
-            sb.append("${r.medicineName}, ${r.totalConsumption}, ${r.stockBalance}\n")
+            sb.append("${r.medicineName}, ${r.totalConsumption.toInt()}, ${r.stockBalance.toInt()}\n")
         }
         builder.setTitle("Monthly Summary ($monthLabel)")
         builder.setMessage(sb.toString())
@@ -204,7 +192,7 @@ object MonthlyConsumptionHelper {
                 file.printWriter().use { out ->
                     out.println("MedicineName,totalConsumption,Stock Balance")
                     orderedRows.forEach { r ->
-                        out.println("${r.medicineName},${r.totalConsumption},${r.stockBalance}")
+                        out.println("${r.medicineName},${r.totalConsumption.toInt()},${r.stockBalance.toInt()}")
                     }
                 }
                 val uri = FileProvider.getUriForFile(

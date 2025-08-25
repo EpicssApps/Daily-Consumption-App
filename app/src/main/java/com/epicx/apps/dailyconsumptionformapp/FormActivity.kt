@@ -1,25 +1,26 @@
 package com.epicx.apps.dailyconsumptionformapp
 
 import CheckInternetConnection.observeNetworkConnectivity
-import com.epicx.apps.dailyconsumptionformapp.FormConstants.specialDecimalMeds
-import android.app.AlertDialog
+import androidx.appcompat.app.AlertDialog
 import android.app.ProgressDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.util.Log
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.view.ViewTreeObserver
 import android.widget.*
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import com.epicx.apps.dailyconsumptionformapp.databinding.ActivityFormBinding
-import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.AddStockHelper
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.EmergencyVisibilityHelper
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.MedicineSubmitHelper
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.StoreIssuedHelper
@@ -36,30 +37,58 @@ import com.google.android.material.snackbar.Snackbar
 import kotlinx.coroutines.launch
 import org.jsoup.Jsoup
 import java.io.IOException
-import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import androidx.core.content.edit
+import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.PendingRequestCache
+import com.epicx.apps.dailyconsumptionformapp.tempStorage.TempRs01DailyStore
 
 class FormActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityFormBinding
     private val vehicleList = FormConstants.vehicleList
-    private val medicineList = FormConstants.medicineList
+    private val newMedicineList = FormConstants.newMedicineList
     private lateinit var db: AppDatabase
     private var alertDialog: AlertDialog? = null
+
     private lateinit var defaultVehicle: String
     private lateinit var layoutStoreIssued: LinearLayout
 
-    // For UI & calculations
-    private var lastLoadedClosingBalance: Float = 0f
-    private var lastLoadedOpeningBalance: Float = 0f
+    // Balances
+    private var lastLoadedClosingBalance: Int = 0
+    private var lastLoadedOpeningBalance: Int = 0
+
+    // App version helpers
     private var appVersionName: String? = null
     private var executor: ExecutorService? = null
     private var handler: Handler? = null
 
+    // Sync control
+    private var syncBlockDialog: AlertDialog? = null
+    private var currentNetworkConnected: Boolean = false
+    private var initialSyncTried: Boolean = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        installSplashScreen()
+
+        // Hold splash until we set isFormActivityReady = true
+        val content = findViewById<View>(android.R.id.content)
+        content.viewTreeObserver.addOnPreDrawListener(
+            object : ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    return if (isFormActivityReady) {
+                        content.viewTreeObserver.removeOnPreDrawListener(this)
+                        true
+                    } else {
+                        false
+                    }
+                }
+            }
+        )
+
         binding = ActivityFormBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
@@ -85,31 +114,63 @@ class FormActivity : AppCompatActivity() {
         val textEmergencyLabel = findViewById<TextView>(R.id.text_emergency_label)
         val textStoreIssued = findViewById<TextView>(R.id.text_store_issued)
         val issueToVehicles = findViewById<Button>(R.id.btnIssue)
+        val btnSendToMonthly = findViewById<Button>(R.id.btnSendToMonthly)
 
         val vehicleAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, vehicleList)
         vehicleAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         vehicleSpinner.adapter = vehicleAdapter
+
         NetworkMonitor.init(applicationContext)
 
         getAppVersionName()
         checkUpdate()
 
+        // One-time deletion example
         val bandageKey = "bandage_deleted_once"
         if (!prefs.getBoolean(bandageKey, false)) {
             val allVehicles = FormConstants.vehicleList
             for (vehicle in allVehicles) {
                 db.deleteMedicineByName(vehicle, "Cotton Bandages BPC 6.5 cm X 6 meter (2.5\")")
             }
-            prefs.edit().putBoolean(bandageKey, true).apply()
+            prefs.edit { putBoolean(bandageKey, true) }
         }
 
+        // Lightweight connectivity (just sets flag)
         NetworkMonitor.observe(this) { isConnected ->
+            currentNetworkConnected = isConnected
             if (!isConnected) {
                 if (alertDialog?.isShowing != true) {
-                    showAlertDialog()
+                    // optional simple alert if you want
                 }
             } else {
                 alertDialog?.dismiss()
+            }
+            enableRetryIfPossible()
+        }
+
+        val snackbar = Snackbar.make(
+            binding.root,
+            "Weak or No internet connection",
+            Snackbar.LENGTH_INDEFINITE
+        )
+        snackbar(snackbar)
+
+        // Strong connectivity observer (validated internet)
+        lifecycleScope.launch {
+            observeNetworkConnectivity(snackbar, applicationContext).collect { isConnected ->
+                currentNetworkConnected = isConnected
+                if (isConnected) {
+                    snackbar.dismiss()
+                    enableRetryIfPossible()
+                } else {
+                    snackbar.show()
+                    if (!isFormActivityReady && initialSyncTried) {
+                        isFormActivityReady = true
+                    }
+                    if (initialSyncTried && !isDataFetchSuccessfull) {
+                        showSyncRequiredDialog()
+                    }
+                }
             }
         }
 
@@ -119,18 +180,32 @@ class FormActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            // Collect all changed items for this vehicle
             val all = db.getAllMedicines().filter { it.vehicleName == defaultVehicle }
+            fun toIntSafe(s: String?): Int = s?.toDoubleOrNull()?.toInt() ?: 0
+            val isRs01 = defaultVehicle.equals("RS-01", ignoreCase = true)
+
             val toSend = all.mapNotNull { rec ->
-                val cons = rec.consumption.toDoubleOrNull() ?: 0.0
-                val emerg = rec.totalEmergency.toDoubleOrNull() ?: 0.0
-                if (cons > 0.0 || emerg > 0.0) {
+                val cons = toIntSafe(rec.consumption)
+                val emerg = toIntSafe(rec.totalEmergency)
+                if (cons <= 0 && emerg <= 0) return@mapNotNull null
+
+                if (isRs01) {
+                    val currentClosing = toIntSafe(rec.closingBalance)
+                    val mainStoreIssued = toIntSafe(rec.storeIssued)
+                    GoogleSheetsClient.SubmitItem(
+                        medicine = rec.medicineName,
+                        consumption = cons,
+                        emergency = 0,
+                        mainStoreIssued = mainStoreIssued,
+                        stockAvailable = currentClosing
+                    )
+                } else {
                     GoogleSheetsClient.SubmitItem(
                         medicine = rec.medicineName,
                         consumption = cons,
                         emergency = emerg
                     )
-                } else null
+                }
             }
 
             if (toSend.isEmpty()) {
@@ -138,55 +213,51 @@ class FormActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            val pd = ProgressDialog(this).apply {
-                setMessage("Submitting day data...")
-                setCancelable(false)
-                show()
-            }
-
-            GoogleSheetsClient.submitConsumption(defaultVehicle, toSend) { ok, resp ->
-                pd.dismiss()
-                if (!ok) {
-                    Toast.makeText(this, "Submit failed: ${resp?.error ?: "network error"}", Toast.LENGTH_LONG).show()
-                    return@submitConsumption
-                }
-                // Optional: reset local consumption/emergency after successful upload
-                toSend.forEach { item ->
-                    db.addOrUpdateMedicine(
+            SubmitPreviewDialogHelper.show(
+                activity = this,
+                vehicle = defaultVehicle,
+                originalItems = toSend,
+                onConfirm = { finalList ->
+                    if (finalList.isEmpty()) {
+                        Toast.makeText(this, "No items left to submit.", Toast.LENGTH_LONG).show()
+                    } else {
+                        performDaySubmit(
+                            vehicle = defaultVehicle,
+                            toSend = finalList,
+                            medicineEdit = findViewById(R.id.edit_medicine),
+                            textOpening = findViewById(R.id.text_opening),
+                            textClosing = findViewById(R.id.text_closing),
+                            editConsumption = findViewById(R.id.edit_consumption),
+                            editEmergency = findViewById(R.id.edit_total_emergency)
+                        )
+                    }
+                },
+                onEditPersist = { med, newCons, newEmerg ->
+                    db.applyEditedPending(
                         vehicle = defaultVehicle,
-                        medicine = item.medicine,
-                        opening = db.getMedicineOpening(defaultVehicle, item.medicine), // you may have your own getter; else pass existing opening
-                        consumption = "0",
-                        emergency = "0",
-                        closing = db.getMedicineClosing(defaultVehicle, item.medicine) // keep existing local closing
+                        medicine = med,
+                        newConsumption = newCons,
+                        newEmergency = newEmerg
                     )
+                },
+                onDeletePersist = { med ->
+                    db.revertPendingForMedicine(defaultVehicle, med)
                 }
-                // Refresh UI if a medicine is already selected
-                val medName = findViewById<EditText>(R.id.edit_medicine).text.toString()
-                if (medName.isNotBlank()) {
-                    MedicineStockUtils.loadMedicineStock(
-                        db = db,
-                        vehicleName = defaultVehicle,
-                        medicineName = medName,
-                        textOpening = findViewById(R.id.text_opening),
-                        textClosing = findViewById(R.id.text_closing),
-                        editConsumption = findViewById(R.id.edit_consumption),
-                        editEmergency = findViewById(R.id.edit_total_emergency),
-                        formatMedValue = ::formatMedValue,
-                        lastLoadedOpeningBalanceSetter = { lastLoadedOpeningBalance = it },
-                        lastLoadedClosingBalanceSetter = { lastLoadedClosingBalance = it }
-                    )
-                }
-                Toast.makeText(this, "Day submitted successfully!", Toast.LENGTH_LONG).show()
-            }
+            )
+        }
+
+        btnSendToMonthly.setOnClickListener {
+            UploadMenuHelper.handleRs01Upload(activity = this, db = db, defaultVehicle = defaultVehicle, getShiftTag = { getShiftTag() })
         }
 
         issueToVehicles.setOnClickListener {
             val intent = Intent(this, IssueMedicineActivity::class.java)
+            intent.putExtra("defaultVehicle", defaultVehicle)
             startActivity(intent)
         }
-        // Vehicle select logic
+
         if (defaultVehicle.isBlank()) {
+            isFormActivityReady = true
             VehicleSelectHelper.showDialog(
                 activity = this,
                 prefs = prefs,
@@ -200,51 +271,43 @@ class FormActivity : AppCompatActivity() {
                 onVehicleSelected = { selected -> defaultVehicle = selected },
                 invalidateOptionsMenu = { invalidateOptionsMenu() },
                 onAfterSelection = { selected ->
-                    SyncFromServerHelper.syncFromServerForVehicle(
-                        activity = this,
-                        db = db,
+                    db.prepopulateMedicinesForVehicle(selected, newMedicineList)
+                    EmergencyVisibilityHelper.update(
+                        editEmergency = editEmergency,
+                        textEmergencyLabel = textEmergencyLabel,
                         vehicle = defaultVehicle,
-                        formatMedValue = ::formatMedValue,
-                        lastLoadedOpeningBalanceSetter = { lastLoadedOpeningBalance = it },
-                        lastLoadedClosingBalanceSetter = { lastLoadedClosingBalance = it },
-                        showLoading = true // Show waiting dialog only for new user initial sync
+                        layoutStoreIssued = layoutStoreIssued,
+                        issueToVehicles = issueToVehicles,
+                        btnSendToMonthly = btnSendToMonthly
                     )
+                    attemptInitialSync(showLoading = true)
                 }
             )
         } else {
             val index = vehicleList.indexOf(defaultVehicle)
             vehicleSpinner.setSelection(if (index >= 0) index else 0)
             vehicleSpinner.isEnabled = false
-            db.prepopulateMedicinesForVehicle(defaultVehicle, FormConstants.medicineList)
+            db.prepopulateMedicinesForVehicle(defaultVehicle, newMedicineList)
             EmergencyVisibilityHelper.update(
                 editEmergency = editEmergency,
                 textEmergencyLabel = textEmergencyLabel,
                 vehicle = defaultVehicle,
                 layoutStoreIssued = layoutStoreIssued,
-                issueToVehicles = issueToVehicles
+                issueToVehicles = issueToVehicles,
+                btnSendToMonthly = btnSendToMonthly
             )
-            SyncFromServerHelper.syncFromServerForVehicle(
-                activity = this,
-                db = db,
-                vehicle = defaultVehicle,
-                formatMedValue = ::formatMedValue,
-                lastLoadedOpeningBalanceSetter = { lastLoadedOpeningBalance = it },
-                lastLoadedClosingBalanceSetter = { lastLoadedClosingBalance = it },
-                showLoading = false // For existing users, no waiting dialog
-            )
+            attemptInitialSync(showLoading = false)
         }
 
-        // Medicine picker
         medicineEdit.isFocusable = false
-
         medicineEdit.setOnClickListener {
-            MedicineDialogUtils.showMedicineDialog(this, medicineList, medicineEdit)
+            MedicineDialogUtils.showMedicineDialog(this, newMedicineList, medicineEdit)
         }
-        // Load Store Issued on medicine change
+
         fun loadStoreIssued(medicine: String) {
             val data = db.getAllMedicines()
                 .find { it.vehicleName == defaultVehicle && it.medicineName == medicine }
-            textStoreIssued.text = data?.storeIssued ?: "0"
+            textStoreIssued.text = formatMedValue(medicine, data?.storeIssued)
         }
 
         medicineEdit.addTextChangedListener {
@@ -266,54 +329,67 @@ class FormActivity : AppCompatActivity() {
             }
         }
 
-        // Store Issued dialog logic
         textStoreIssued.setOnClickListener {
-            StoreIssuedHelper.showDialog(activity = this, defaultVehicle = defaultVehicle, medicineEdit = medicineEdit, textStoreIssued = textStoreIssued) { vehicle, med, value ->
+            StoreIssuedHelper.showDialog(
+                activity = this,
+                defaultVehicle = defaultVehicle,
+                medicineEdit = medicineEdit,
+                textStoreIssued = textStoreIssued
+            ) { vehicle, med, value ->
                 db.updateStoreIssued(vehicle, med, value)
             }
         }
 
-        // Consumption field update (sirf UI update; yahan stock-issue block hata diya)
         editConsumption.addTextChangedListener {
-            val consumption = editConsumption.text.toString().toFloatOrNull() ?: 0f
+            val consumption = editConsumption.text.toString().toIntOrNull() ?: 0
             val baseClosing = lastLoadedClosingBalance
-            val newClosing = (baseClosing - consumption).coerceAtLeast(0f)
+            val newClosing = (baseClosing - consumption).coerceAtLeast(0)
             val medicineName = medicineEdit.text.toString()
             textClosing.text = formatMedValue(medicineName, newClosing.toString())
         }
 
-        val snackbar = Snackbar.make(
-            binding.root,
-            "Weak or No internet connection",
-            Snackbar.LENGTH_INDEFINITE
-        )
-        snackbar(snackbar)
-        lifecycleScope.launch {
-            observeNetworkConnectivity(snackbar, applicationContext).collect { isConnected ->
-                if (isConnected) {
-                    snackbar.dismiss()
-                } else {
-                    snackbar.show()
-                }
-            }
-        }
-
         btnSubmit.setOnClickListener {
-            MedicineSubmitHelper.handleSubmit(activity = this, defaultVehicle = defaultVehicle, medicineEdit = medicineEdit, textOpening = textOpening, editConsumption = editConsumption, editEmergency = editEmergency, textClosing = textClosing, errorText = errorText, getAllMedicines = {
-                // Aapke DB model ko helper ke model me map karein
-                db.getAllMedicines().map {
-                    MedicineSubmitHelper.DbMedRecord(vehicleName = it.vehicleName, medicineName = it.medicineName, closingBalance = it.closingBalance, consumption = it.consumption, totalEmergency = it.totalEmergency)
-                }
-            },
+            // ADDED: Pre-check only consumption vs lastLoadedClosingBalance
+            val consVal = editConsumption.text.toString().trim().toIntOrNull() ?: 0
+            if (consVal > lastLoadedClosingBalance) {
+                MaterialAlertDialogBuilder(this, R.style.AlertDialogTheme)
+                    .setTitle("Insufficient Balance")
+                    .setMessage(
+                        "Current Closing Balance: $lastLoadedClosingBalance\n" +
+                                "Entered Consumption: $consVal\n\n" +
+                                "Itna stock available nahi. Pehle balance barhaen ya consumption kam karein."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+                return@setOnClickListener
+            }
+            // END ADDED
+
+            MedicineSubmitHelper.handleSubmit(
+                activity = this,
+                defaultVehicle = defaultVehicle,
+                medicineEdit = medicineEdit,
+                textOpening = textOpening,
+                editConsumption = editConsumption,
+                editEmergency = editEmergency,
+                textClosing = textClosing,
+                errorText = errorText,
+                getAllMedicines = {
+                    db.getAllMedicines().map {
+                        MedicineSubmitHelper.DbMedRecord(
+                            vehicleName = it.vehicleName,
+                            medicineName = it.medicineName,
+                            closingBalance = it.closingBalance,
+                            consumption = it.consumption,
+                            totalEmergency = it.totalEmergency
+                        )
+                    }
+                },
                 addOrUpdateMedicine = { v, m, o, c, e, cl ->
                     db.addOrUpdateMedicine(v, m, o, c, e, cl)
                 },
-                formatMedValue = { med, value ->
-                    formatMedValue(med, value)
-                },
-                onClosingRecalculated = { value ->
-                    lastLoadedClosingBalance = value
-                }
+                formatMedValue = { med, value -> formatMedValue(med, value) },
+                onClosingRecalculated = { value -> lastLoadedClosingBalance = value }
             )
         }
 
@@ -322,7 +398,90 @@ class FormActivity : AppCompatActivity() {
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
             startActivity(intent)
         }
+    }
 
+    private fun isDeviceOnline(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val caps = cm.getNetworkCapabilities(network) ?: return false
+        val hasInternet = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+        val validated = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        return hasInternet && validated
+    }
+
+    private fun attemptInitialSync(showLoading: Boolean) {
+        if (defaultVehicle.isBlank()) return
+        initialSyncTried = true
+
+        // NEW: Skip server fetch if there are local unsynced consumption/emergency changes
+        if (hasLocalUnsyncedChanges(defaultVehicle)) {
+            // Mark as ready so splash release ho jaye
+            isFormActivityReady = true
+            isDataFetchSuccessfull = true  // treat as “ok” so warning dialog na aaye
+            return
+        }
+
+        val onlineNow = isDeviceOnline()
+        if (!onlineNow) {
+            if (!isFormActivityReady) isFormActivityReady = true
+            showSyncRequiredDialog()
+            return
+        }
+
+        SyncFromServerHelper.syncFromServerForVehicle(
+            activity = this,
+            db = db,
+            vehicle = defaultVehicle,
+            formatMedValue = ::formatMedValue,
+            lastLoadedOpeningBalanceSetter = { lastLoadedOpeningBalance = it },
+            lastLoadedClosingBalanceSetter = { lastLoadedClosingBalance = it },
+            showLoading = showLoading,
+            onFailure = {
+                if (!isFormActivityReady) isFormActivityReady = true
+                showSyncRequiredDialog()
+            },
+            onSuccess = {
+                syncBlockDialog?.dismiss()
+            }
+        )
+    }
+
+    private fun showSyncRequiredDialog() {
+        if (isDeviceOnline()) {
+            attemptInitialSync(showLoading = true)
+            return
+        }
+        if (isFinishing || isDestroyed) return
+        if (syncBlockDialog?.isShowing == true) {
+            enableRetryIfPossible()
+            return
+        }
+
+        syncBlockDialog = MaterialAlertDialogBuilder(this, R.style.AlertDialogTheme)
+            .setIcon(R.drawable.ic_update)
+            .setTitle("Internet Required")
+            .setMessage(
+                "Aap ka internet weak ya disconnect hai. Online data fetch nahi ho saka. " +
+                        "Internet theek karke Retry dabayen. Is data ke baghair app usable nahi."
+            )
+            .setCancelable(false)
+            .setPositiveButton("Retry", null)
+            .create()
+
+        syncBlockDialog?.setOnShowListener {
+            val btn = syncBlockDialog!!.getButton(AlertDialog.BUTTON_POSITIVE)
+            btn.isEnabled = isDeviceOnline() || currentNetworkConnected
+            btn.setOnClickListener {
+                btn.isEnabled = false
+                attemptInitialSync(showLoading = true)
+            }
+        }
+        syncBlockDialog?.show()
+    }
+
+    private fun enableRetryIfPossible() {
+        val btn = syncBlockDialog?.getButton(AlertDialog.BUTTON_POSITIVE)
+        btn?.isEnabled = isDeviceOnline() || currentNetworkConnected
     }
 
     private fun checkUpdate() {
@@ -339,20 +498,12 @@ class FormActivity : AppCompatActivity() {
                 handler?.post {
                     if (isUpdateAvailable == "true") {
                         if (appVersionName != appVersion) {
-                            goToUpdate(appVersion, updateInfo)
+                            goToUpdate(appVersion!!, updateInfo)
                         }
                     }
                 }
-                // Handle case where expected element is not found
-                handler?.post {
-                    // Notify user or log an error
-                }
-            } catch (e: IOException) {
-                e.printStackTrace()
-                // Handle connection or parsing errors
-                handler?.post {
-                    // Notify user or log an error
-                }
+            } catch (_: IOException) {
+                handler?.post { }
             }
         }
     }
@@ -380,6 +531,7 @@ class FormActivity : AppCompatActivity() {
         }
     }
 
+
     override fun onResume() {
         super.onResume()
         val medicineName = findViewById<EditText>(R.id.edit_medicine).text.toString()
@@ -398,17 +550,47 @@ class FormActivity : AppCompatActivity() {
         }
     }
 
-    private fun showAlertDialog() {
-        if (!isFinishing && !isDestroyed) {
-            alertDialog = AlertDialog.Builder(this)
-                .setTitle("No Internet Connection")
-                .setMessage("Please connect to continue.")
-                .setCancelable(false)
-                .setPositiveButton("Exit") { _, _ -> showAlertDialog() }
-                .show()
-        }
+    private fun formatMedValue(medicineName: String, value: String?): String {
+        val v = value?.toDoubleOrNull() ?: 0.0
+        return v.toInt().toString()
     }
 
+    private fun showSubmitPreviewDialog(
+        vehicle: String,
+        items: List<GoogleSheetsClient.SubmitItem>,
+        onConfirm: () -> Unit
+    ) {
+        val previewText = buildString {
+            append("Vehicle: ").append(vehicle).append('\n')
+            append("Total Medicines: ").append(items.size).append("\n\n")
+            items.sortedBy { it.medicine.lowercase() }.forEachIndexed { index, item ->
+                append("${index + 1}. ${item.medicine}\n")
+                append("   Consumption: ${item.consumption}   Emergency: ${item.emergency}\n")
+            }
+        }
+
+        val tv = TextView(this).apply {
+            text = previewText
+            setPadding(32, 24, 32, 0)
+            textSize = 14f
+            isVerticalScrollBarEnabled = true
+            overScrollMode = View.OVER_SCROLL_IF_CONTENT_SCROLLS
+        }
+        val scroll = ScrollView(this).apply {
+            addView(tv)
+        }
+
+       MaterialAlertDialogBuilder(this, R.style.AlertDialogTheme)
+            .setIcon(R.drawable.ic_update)
+            .setTitle("Confirm Submission")
+            .setView(scroll)
+            .setPositiveButton("Upload") { d, _ ->
+                d.dismiss()
+                onConfirm()
+            }
+            .setNegativeButton("Cancel") { d, _ -> d.dismiss() }
+            .show()
+    }
     private fun getShiftTag(): String? {
         val now = Calendar.getInstance()
         val hour = now.get(Calendar.HOUR_OF_DAY)
@@ -420,37 +602,111 @@ class FormActivity : AppCompatActivity() {
             else -> null
         }
     }
-
-    override fun onCreateOptionsMenu(menu: Menu?): Boolean {
-        menuInflater.inflate(R.menu.menu_form, menu)
-        val rs01MenuItem = menu?.findItem(R.id.action_upload_rs01)
-        val uploadMenuItem = menu?.findItem(R.id.action_upload)
-
-        if (defaultVehicle == "RS-01") {
-            rs01MenuItem?.isVisible = true
-            uploadMenuItem?.isVisible = true
-        } else {
-            rs01MenuItem?.isVisible = false
-            uploadMenuItem?.isVisible = true
+    /* ONLY the performDaySubmit function changed to add signature & reuse logic.
+   Replace your existing performDaySubmit in FormActivity with this version.
+   (Everything else in the activity remains the same as your current file.)
+*/
+    private fun performDaySubmit(
+        vehicle: String,
+        toSend: List<GoogleSheetsClient.SubmitItem>,
+        medicineEdit: EditText,
+        textOpening: TextView,
+        textClosing: TextView,
+        editConsumption: EditText,
+        editEmergency: EditText
+    ) {
+        val pd = ProgressDialog(this).apply {
+            setMessage("Submitting Consumption data...")
+            setCancelable(false)
+            show()
         }
-        return true
-    }
 
-    override fun onOptionsItemSelected(item: MenuItem): Boolean {
-        return when (item.itemId) {
-            R.id.action_upload -> {
-                UploadMenuHelper.handleNormalUpload(activity = this, db = db, defaultVehicle = defaultVehicle, getShiftTag = { getShiftTag() })
+        // Signature for this payload
+        val signature = PendingRequestCache.signatureForConsumption(vehicle, toSend)
+        val reuseRequestId = PendingRequestCache.reuseIfSame(signature)
+
+        GoogleSheetsClient.submitConsumption(
+            vehicle = vehicle,
+            items = toSend,
+            previousRequestId = reuseRequestId
+        ) { ok, resp, requestIdUsed ->
+            pd.dismiss()
+
+            val duplicate = resp?.duplicate == true
+
+            if (!ok && !duplicate) {
+                // Store requestId for reuse if user retries
+                PendingRequestCache.store(signature, requestIdUsed)
+                Toast.makeText(
+                    this,
+                    "Submit failed: ${resp?.error ?: "network error"} (You can retry)",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@submitConsumption
             }
-            R.id.action_upload_rs01 -> {
-                UploadMenuHelper.handleRs01Upload(activity = this, db = db, defaultVehicle = defaultVehicle, getShiftTag = { getShiftTag() })
+
+            // Success or duplicate success -> clear cache
+            PendingRequestCache.clearIf(signature)
+
+            if (vehicle.equals("RS-01", true)) {
+                val today = TempRs01DailyStore.todayDate()
+                toSend.forEach { item ->
+                    // item.consumption = jo aap ne server ko bheji
+                    TempRs01DailyStore.addConsumption(
+                        context = this,
+                        date = today,
+                        medicine = item.medicine,
+                        add = item.consumption
+                    )
+                }
             }
-            else -> super.onOptionsItemSelected(item)
+
+            // Update local DB (treat duplicate same as success)
+            toSend.forEach { item ->
+                db.addOrUpdateMedicine(
+                    vehicle = vehicle,
+                    medicine = item.medicine,
+                    opening = db.getMedicineOpening(vehicle, item.medicine),
+                    consumption = "0",
+                    emergency = "0",
+                    closing = db.getMedicineClosing(vehicle, item.medicine)
+                )
+            }
+
+            val medName = medicineEdit.text.toString()
+            if (medName.isNotBlank()) {
+                MedicineStockUtils.loadMedicineStock(
+                    db = db,
+                    vehicleName = vehicle,
+                    medicineName = medName,
+                    textOpening = textOpening,
+                    textClosing = textClosing,
+                    editConsumption = editConsumption,
+                    editEmergency = editEmergency,
+                    formatMedValue = ::formatMedValue,
+                    lastLoadedOpeningBalanceSetter = { lastLoadedOpeningBalance = it },
+                    lastLoadedClosingBalanceSetter = { lastLoadedClosingBalance = it }
+                )
+            }
+
+            val msg = if (duplicate)
+                "Already submitted earlier (duplicate prevented)."
+            else
+                "Day submitted successfully!"
+            Toast.makeText(this, msg, Toast.LENGTH_LONG).show()
         }
     }
-
-    private fun formatMedValue(medicineName: String, value: String?): String {
-        val isSpecial = specialDecimalMeds.contains(medicineName.trim())
-        val doubleValue = value?.toDoubleOrNull() ?: 0.0
-        return if (isSpecial) "%.2f".format(doubleValue) else doubleValue.toInt().toString()
+    private fun hasLocalUnsyncedChanges(vehicle: String): Boolean {
+        return db.getAllMedicines().any { rec ->
+            rec.vehicleName == vehicle &&
+                    (
+                            (rec.consumption?.toIntOrNull() ?: 0) > 0 ||
+                                    (rec.totalEmergency?.toIntOrNull() ?: 0) > 0
+                            )
+        }
+    }
+    companion object {
+        var isFormActivityReady = false
+        var isDataFetchSuccessfull = false
     }
 }

@@ -4,4 +4,15 @@
     <color name="white">#FFFFFFFF</color>
     <color name="dayNight">#FFFFFFFF</color>
     <color name="teal_700">#018786</color>
+    <color name="dayNightSp">#00AEEf</color>
+    <color name="previewItemBg">#FFF5F5F7</color> <!-- very light surface -->
+    <color name="previewItemDivider">#33000000</color>
+
+    <color name="previewItemText">#212121</color>
+    <color name="previewLabelConsumption">#1565C0</color>
+    <color name="previewLabelEmergency">#D35400</color>
+
+    <color name="previewButtonEdit">#0288D1</color>
+    <color name="previewButtonDelete">#D32F2F</color>
+    <color name="previewButtonText">#FFFFFF</color>
 </resources>

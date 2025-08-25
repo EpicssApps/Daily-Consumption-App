@@ -12,19 +12,12 @@ class CompiledSummaryActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private lateinit var adapter: CompiledSummaryAdapter
 
-    // Universal formatting function for all value display and WebView
+    // All integer display; Examination Gloves -> pairs
     private fun formatValue(medicineName: String, value: Double): String {
-        return if (medicineName.trim().equals("Examination Gloves", ignoreCase = true)) {
-            val pairValue = (value / 2).toInt() // Only integer part, ignore decimal
-            pairValue.toString()
+        return if (medicineName.trim().equals("Examination Gloves in Numbers", ignoreCase = true)) {
+            (value / 2).toInt().toString()
         } else {
-            if (value == 0.0) {
-                "0"
-            } else if (value % 1.0 == 0.0) {
-                value.toInt().toString()
-            } else {
-                String.format("%.2f", value)
-            }
+            value.toInt().toString()
         }
     }
 
@@ -52,7 +45,7 @@ class CompiledSummaryActivity : AppCompatActivity() {
                 intent.putExtra("emergency", item.totalEmergency.toInt().toString())
                 intent.putExtra("closing", formatValue(item.medicineName, item.totalClosing))
                 intent.putExtra("storeIssued", formatValue(item.medicineName, item.totalStoreIssued))
-                intent.putExtra("stockAvailable", item.stockAvailable) // Already string
+                intent.putExtra("stockAvailable", item.stockAvailable)
                 startActivity(intent)
             }
         )
@@ -60,7 +53,6 @@ class CompiledSummaryActivity : AppCompatActivity() {
         binding.recyclerCompiled.layoutManager = LinearLayoutManager(this)
         binding.recyclerCompiled.adapter = adapter
 
-        // Delete All Button listener
         binding.btnDeleteAll.setOnClickListener {
             db.deleteAllCompiledSummary()
             adapter.clearAll()

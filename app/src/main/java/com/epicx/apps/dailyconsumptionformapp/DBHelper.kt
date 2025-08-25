@@ -5,8 +5,8 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
-
 class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
+
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE issue_items (" +
@@ -22,11 +22,11 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
     }
 
     override fun onUpgrade(db: SQLiteDatabase?, oldVersion: Int, newVersion: Int) {
-        // handle migrations if needed
+        // Future migrations if needed
     }
 
     fun insertIssue(vehicle: String?, medicine: String?, qty: Int): Long {
-        val db = getWritableDatabase()
+        val db = writableDatabase
         val cv = ContentValues()
         cv.put("vehicle", vehicle)
         cv.put("medicine", medicine)
@@ -37,15 +37,15 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
     }
 
     fun getUnuploadedByVehicle(vehicle: String?): MutableList<IssueItem?> {
-        val db = getReadableDatabase()
+        val db = readableDatabase
         val c = db.rawQuery(
             "SELECT id, vehicle, medicine, qty, created_at, uploaded FROM issue_items WHERE vehicle=? AND uploaded=0",
-            arrayOf<String?>(vehicle)
+            arrayOf(vehicle)
         )
-        val out: MutableList<IssueItem?> = ArrayList<IssueItem?>()
+        val out: MutableList<IssueItem?> = ArrayList()
         try {
             while (c.moveToNext()) {
-                val it: IssueItem = IssueItem()
+                val it = IssueItem()
                 it.id = c.getLong(0)
                 it.vehicle = c.getString(1)
                 it.medicine = c.getString(2)
@@ -62,19 +62,36 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
 
     fun markUploaded(ids: MutableList<Long?>?) {
         if (ids == null || ids.isEmpty()) return
-        val db = getWritableDatabase()
+        val db = writableDatabase
         val sb = StringBuilder()
         sb.append("UPDATE issue_items SET uploaded=1 WHERE id IN (")
-        for (i in ids.indices) {
-            if (i > 0) sb.append(",")
-            sb.append(ids.get(i))
+        ids.forEachIndexed { idx, id ->
+            if (idx > 0) sb.append(",")
+            sb.append(id)
         }
         sb.append(")")
         db.execSQL(sb.toString())
     }
 
+    // NEW: Update single pending row (only if still unuploaded)
+    fun updateIssueQty(id: Long, newQty: Int) {
+        if (newQty <= 0) return
+        writableDatabase.execSQL(
+            "UPDATE issue_items SET qty=? WHERE id=? AND uploaded=0",
+            arrayOf(newQty, id)
+        )
+    }
+
+    // NEW: Delete single pending row (only if still unuploaded)
+    fun deleteIssue(id: Long) {
+        writableDatabase.execSQL(
+            "DELETE FROM issue_items WHERE id=? AND uploaded=0",
+            arrayOf(id)
+        )
+    }
+
     companion object {
-        const val DB_NAME: String = "issuedb.db"
-        const val DB_VER: Int = 1
+        const val DB_NAME = "issuedb.db"
+        const val DB_VER = 1
     }
 }

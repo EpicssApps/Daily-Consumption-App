@@ -1,70 +1,111 @@
 <?xml version="1.0" encoding="utf-8"?>
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent" android:layout_height="match_parent">
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
     <LinearLayout
-        android:orientation="vertical" android:padding="16dp"
-        android:layout_width="match_parent" android:layout_height="wrap_content">
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
 
         <TextView
-            android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Select Vehicle" android:textStyle="bold"/>
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Vehicle"
+            android:textStyle="bold" />
 
         <Spinner
             android:id="@+id/spVehicle"
-            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:visibility="gone" />
 
         <TextView
-            android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Select Medicine" android:textStyle="bold" android:layout_marginTop="16dp"/>
-
-        <Spinner
-            android:id="@+id/spMedicine"
-            android:layout_width="match_parent" android:layout_height="wrap_content"/>
+            android:id="@+id/tvVehicleStatic"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="#1Fffffff"
+            android:padding="8dp"
+            android:text="Vehicle"
+            android:textColor="#ffffff"
+            android:visibility="visible" />
 
         <TextView
-            android:layout_width="wrap_content" android:layout_height="wrap_content"
-            android:text="Issue Quantity" android:textStyle="bold" android:layout_marginTop="16dp"/>
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Select Medicine"
+            android:textStyle="bold" />
+
+        <EditText
+            android:id="@+id/edit_medicine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:clickable="true"
+            android:drawableRight="@android:drawable/ic_menu_search"
+            android:focusable="false"
+            android:hint="Search / Select Medicine"
+            android:inputType="none" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Issue Quantity"
+            android:textStyle="bold" />
 
         <EditText
             android:id="@+id/etQty"
-            android:inputType="number"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:hint="e.g., 10"/>
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g., 10"
+            android:inputType="number" />
 
         <Button
             android:id="@+id/btnSave"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="Save (Local)" android:layout_marginTop="16dp"/>
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Save (Local)" />
 
-        <Button
-            android:id="@+id/btnUpload"
-            android:layout_width="match_parent" android:layout_height="wrap_content"
-            android:text="Upload to Google Sheet" android:layout_marginTop="24dp"/>
-
-        <!-- New: Pending summary area -->
         <TextView
             android:id="@+id/tvPendingTitle"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
             android:text="Pending items"
-            android:textStyle="bold"
-            android:layout_marginTop="20dp"/>
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvPendingList"
             android:layout_width="match_parent"
             android:layout_height="200dp"
-            android:background="#1Fffffff"
-            android:padding="12dp"
-            android:textColor="#ffffff"
-            android:scrollbars="vertical"
-            android:fadingEdgeLength="8dp"
-            android:overScrollMode="always"
-            android:textIsSelectable="false"
-            android:textSize="14sp"
             android:layout_marginTop="8dp"
             android:layout_marginBottom="12dp"
+            android:background="#1Fffffff"
+            android:fadingEdgeLength="8dp"
             android:gravity="top|start"
-            android:text="No pending items."/>
+            android:overScrollMode="always"
+            android:padding="12dp"
+            android:scrollbars="vertical"
+            android:text="No pending items."
+            android:textColor="#ffffff"
+            android:textIsSelectable="false"
+            android:textSize="14sp" />
+
+        <!-- NEW Manage Button -->
+        <Button
+            android:id="@+id/btnManage"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Manage / Edit Pending" />
+
+        <Button
+            android:id="@+id/btnUpload"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Upload to Google Sheet" />
     </LinearLayout>
 </ScrollView>

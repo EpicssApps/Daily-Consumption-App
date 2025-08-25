@@ -5,14 +5,14 @@
         <!-- <item name="colorPrimary">@color/my_light_primary</item> -->
     </style>
 
-    <style name="Theme.FormActivity.NoActionBar" parent="Theme.Material3.DayNight" >
+    <style name="Theme.FormActivity.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar" >
         <item name="colorPrimaryDark">@color/holo_blue_light</item>
         <item name="colorPrimary">@color/holo_blue_light</item>
         <item name="android:navigationBarColor">@color/dayNight</item>
         <item name="android:statusBarColor">@color/holo_blue_light</item>
         <item name="colorPrimaryVariant">@color/holo_blue_light</item>
-        <item name="windowActionBar">true</item>
-        <item name="windowNoTitle">false</item>
+        <item name="windowActionBar">false</item>
+        <item name="windowNoTitle">true</item>
     </style>
 
     <style name="Theme.SummaryActivity.NoActionBar" parent="Theme.Material3.DayNight.NoActionBar" >

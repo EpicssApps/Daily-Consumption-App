@@ -3,4 +3,15 @@
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
     <color name="dayNight">#000000</color>
+    <color name="dayNightSp">#000000</color>
+    <color name="previewItemBg">#1AFFFFFF</color> <!-- the original translucent white -->
+    <color name="previewItemDivider">#25FFFFFF</color>
+
+    <color name="previewItemText">#FFFFFF</color>
+    <color name="previewLabelConsumption">#90CAF9</color>
+    <color name="previewLabelEmergency">#FFCC80</color>
+
+    <color name="previewButtonEdit">#2196F3</color>
+    <color name="previewButtonDelete">#E53935</color>
+    <color name="previewButtonText">#FFFFFF</color>
 </resources>

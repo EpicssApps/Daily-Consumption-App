@@ -19,13 +19,13 @@ import java.util.*
 object CsvExportUtils {
     fun exportSskSelectedMedicinesCsv(
         file: File,
-        medicineList: List<String>,
+        medicineExportList: List<String>,
         compiledSummary: List<CompiledMedicineDataWithId>
     ): Boolean {
         return try {
             file.printWriter().use { out ->
                 out.println("Medicine Name,Opening Balance,Consumption,Closing Balance")
-                medicineList.forEach { medName ->
+                medicineExportList.forEach { medName ->
                     val entry = compiledSummary.firstOrNull { it.medicineName.trim() == medName.trim() }
                     var opening = entry?.totalOpening ?: 0.0
                     var consumption = entry?.totalConsumption ?: 0.0
@@ -38,7 +38,7 @@ object CsvExportUtils {
                         closing = (closing / 2).toInt().toDouble()
                         out.println("%s,%.0f,%.0f,%.0f".format(safeMedName, opening, consumption, closing))
                     } else {
-                        out.println("%s,%.2f,%.2f,%.2f".format(safeMedName, opening, consumption, closing))
+                        out.println("%s,%d,%d,%d".format(safeMedName, opening.toInt(), consumption.toInt(), closing.toInt()))
                     }
                 }
             }

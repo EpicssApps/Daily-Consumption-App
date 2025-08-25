@@ -14,18 +14,21 @@ object EmergencyVisibilityHelper {
         vehicle: String,
         layoutStoreIssued: LinearLayout,
         issueToVehicles: Button,
-        rs01Vehicle: String = "RS-01"
+        rs01Vehicle: String = "RS-01",
+        btnSendToMonthly: Button
     ) {
         if (vehicle == rs01Vehicle) {
             editEmergency.visibility = View.GONE
             textEmergencyLabel.visibility = View.GONE
             layoutStoreIssued.visibility = View.VISIBLE
             issueToVehicles.visibility = View.VISIBLE
+            btnSendToMonthly.visibility = View.VISIBLE
         } else {
             editEmergency.visibility = View.VISIBLE
             textEmergencyLabel.visibility = View.VISIBLE
             layoutStoreIssued.visibility = View.GONE
             issueToVehicles.visibility = View.GONE
+            btnSendToMonthly.visibility = View.GONE
         }
     }
 }

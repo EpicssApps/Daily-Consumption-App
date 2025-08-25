@@ -20,10 +20,10 @@ object AddStockHelper {
         editConsumption: EditText,
         editEmergency: EditText,
         formatMedValue: (medicineName: String, value: String?) -> String,
-        getLastLoadedOpening: () -> Float,
-        setLastLoadedOpening: (Float) -> Unit,
-        getLastLoadedClosing: () -> Float,
-        setLastLoadedClosing: (Float) -> Unit
+        getLastLoadedOpening: () -> Int,
+        setLastLoadedOpening: (Int) -> Unit,
+        getLastLoadedClosing: () -> Int,
+        setLastLoadedClosing: (Int) -> Unit
     ) {
         val medicineName = medicineEdit.text.toString()
         if (medicineName.isBlank()) {
@@ -41,8 +41,8 @@ object AddStockHelper {
             .setMessage("How much new stock for $medicineName?")
             .setView(input)
             .setPositiveButton("Add") { dialog, _ ->
-                val addValue = input.text.toString().toFloatOrNull() ?: 0f
-                if (addValue > 0f) {
+                val addValue = input.text.toString().toIntOrNull() ?: 0
+                if (addValue > 0) {
                     val newClosing = getLastLoadedClosing() + addValue
                     val newOpening = getLastLoadedOpening() + addValue
 

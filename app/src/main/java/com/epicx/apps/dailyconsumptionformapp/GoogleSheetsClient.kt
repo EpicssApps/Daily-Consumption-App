@@ -7,68 +7,79 @@ import com.google.gson.annotations.SerializedName
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.net.URLEncoder
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 object GoogleSheetsClient {
 
-    // NOTE: yahan apna deployed Web App URL use karein
-    private const val WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwiE9PYOCSCB-NwYMqIGcK2hGz0xrJ7PwW5P-Glb1DwrkoWziD_Q4FFK2cdlQhdqZTfuw/exec"
+    private const val WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw_tkfECdcd1_Cyrhegb1ELv30--u_lnhp6F2Hz_kF80i43yKm5eNYeILGehEyQ4BdyBQ/exec"
     private const val API_KEY = "8k4jd723lkdc723pos57"
 
     private val gson = Gson()
     private val jsonMedia = "application/json".toMediaType()
 
     private val http = OkHttpClient.Builder()
-        .connectTimeout(20, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(60, TimeUnit.SECONDS)
+        .writeTimeout(60, TimeUnit.SECONDS)
         .build()
 
-    // RS-01 issuing flow (existing)
+    /* ========== Data Models ========== */
+
     data class MedQty(
         @SerializedName("medicine") val medicine: String,
         @SerializedName("qty") val qty: Int
     )
 
-    // Day submit (consume flow)
     data class SubmitItem(
         @SerializedName("medicine") val medicine: String,
-        @SerializedName("consumption") val consumption: Double,
-        @SerializedName("emergency") val emergency: Double
+        @SerializedName("consumption") val consumption: Int,
+        @SerializedName("emergency") val emergency: Int,
+        @SerializedName("mainStoreIssued") val mainStoreIssued: Int? = null,
+        @SerializedName("stockAvailable")  val stockAvailable:  Int? = null
     )
 
-    // Separate payloads to keep types clean
     private data class IssuePayload(
         @SerializedName("vehicle") val vehicle: String,
         @SerializedName("items") val items: List<MedQty>,
         @SerializedName("key") val key: String = API_KEY,
-        @SerializedName("mode") val mode: String? = null // excluded by Gson when null
+        @SerializedName("mode") val mode: String? = null,
+        @SerializedName("requestId") val requestId: String
     )
 
     private data class ConsumePayload(
         @SerializedName("vehicle") val vehicle: String,
         @SerializedName("items") val items: List<SubmitItem>,
         @SerializedName("key") val key: String = API_KEY,
-        @SerializedName("mode") val mode: String = "consume"
+        @SerializedName("mode") val mode: String = "consume",
+        @SerializedName("requestId") val requestId: String
+    )
+
+    private data class RolloverPayload(
+        @SerializedName("vehicle") val vehicle: String,
+        @SerializedName("items") val items: List<String> = emptyList(),
+        @SerializedName("key") val key: String = API_KEY,
+        @SerializedName("mode") val mode: String = "rollover",
+        @SerializedName("requestId") val requestId: String
     )
 
     data class UploadResponse(
         @SerializedName("ok") val ok: Boolean,
+        @SerializedName("duplicate") val duplicate: Boolean? = null,
         @SerializedName("vehicle") val vehicle: String? = null,
-        // For 'issue' mode script returns 'from'/'to'
-        // For 'consume' mode script returns detailed fields, but we don't strictly rely on them
         @SerializedName("updated") val updated: List<UpdatedItem>? = null,
         @SerializedName("notFound") val notFound: List<NotFoundItem>? = null,
-        @SerializedName("error") val error: String? = null
+        @SerializedName("error") val error: String? = null,
+        @SerializedName("mode") val mode: String? = null,
+        @SerializedName("code") val code: String? = null
     )
 
     data class UpdatedItem(
         @SerializedName("medicine") val medicine: String,
         @SerializedName("from") val from: Double? = null,
         @SerializedName("to") val to: Double? = null
-        // consume mode may send different keys; we are not strictly using them
     )
 
     data class NotFoundItem(
@@ -76,93 +87,86 @@ object GoogleSheetsClient {
         @SerializedName("reason") val reason: String?
     )
 
-    // Balances API models
     data class BalanceRow(
         @SerializedName("medicine") val medicine: String,
         @SerializedName("opening") val opening: Double,
-        @SerializedName("closing") val closing: Double
+        @SerializedName("closing") val closing: Double,
+        @SerializedName("storeIssued") val storeIssued: Double? = null,
+        @SerializedName("stockAvailable") val stockAvailable: Double? = null
     )
+
     data class BalancesResponse(
         @SerializedName("ok") val ok: Boolean,
         @SerializedName("vehicle") val vehicle: String? = null,
         @SerializedName("rows") val rows: List<BalanceRow>? = null,
-        @SerializedName("error") val error: String? = null
+        @SerializedName("error") val error: String? = null,
+        @SerializedName("code") val code: String? = null
     )
 
-    // RS-01: Upload issued quantities (closing += qty)
+    /* ========== Public API (with requestId reuse support) ========== */
+
     fun uploadIssues(
         context: android.content.Context,
         vehicle: String,
         items: List<MedQty>,
-        callback: (success: Boolean, response: UploadResponse?) -> Unit
+        previousRequestId: String? = null,
+        callback: (success: Boolean, response: UploadResponse?, requestIdUsed: String) -> Unit
     ) {
-        val payload = IssuePayload(vehicle = vehicle, items = items)
-        val body = RequestBody.create(jsonMedia, gson.toJson(payload))
-
+        val reqId = previousRequestId ?: newReqId()
+        val payload = IssuePayload(
+            vehicle = vehicle,
+            items = items,
+            requestId = reqId
+        )
+        val body = gson.toJson(payload).toRequestBody(jsonMedia)
         val req = Request.Builder()
             .url(WEB_APP_URL)
             .post(body)
             .addHeader("Content-Type", "application/json")
             .addHeader("X-API-KEY", API_KEY)
             .build()
-
-        http.newCall(req).enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                postToMain { callback(false, UploadResponse(ok = false, error = e.message)) }
-            }
-
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                response.use { resp ->
-                    val bodyStr = resp.body?.string().orEmpty()
-                    val parsed = try {
-                        gson.fromJson(bodyStr, UploadResponse::class.java)
-                    } catch (t: Throwable) {
-                        UploadResponse(ok = false, error = "Invalid response")
-                    }
-                    val success = resp.isSuccessful && (parsed.ok)
-                    postToMain { callback(success, parsed) }
-                }
-            }
-        })
+        http.newCall(req).enqueue(defaultCallback(reqId, callback))
     }
 
-    // Normal users: Submit day consumption (closing -= consumption, D/E += cumulative)
     fun submitConsumption(
         vehicle: String,
         items: List<SubmitItem>,
-        callback: (success: Boolean, response: UploadResponse?) -> Unit
+        previousRequestId: String? = null,
+        callback: (success: Boolean, response: UploadResponse?, requestIdUsed: String) -> Unit
     ) {
-        val payload = ConsumePayload(vehicle = vehicle, items = items)
-        val body = RequestBody.create(jsonMedia, gson.toJson(payload))
-
+        val reqId = previousRequestId ?: newReqId()
+        val payload = ConsumePayload(
+            vehicle = vehicle,
+            items = items,
+            requestId = reqId
+        )
+        val body = gson.toJson(payload).toRequestBody(jsonMedia)
         val req = Request.Builder()
             .url(WEB_APP_URL)
             .post(body)
             .addHeader("Content-Type", "application/json")
             .addHeader("X-API-KEY", API_KEY)
             .build()
-
-        http.newCall(req).enqueue(object : okhttp3.Callback {
-            override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
-                postToMain { callback(false, UploadResponse(ok = false, error = e.message)) }
-            }
-
-            override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
-                response.use { resp ->
-                    val bodyStr = resp.body?.string().orEmpty()
-                    val parsed = try {
-                        gson.fromJson(bodyStr, UploadResponse::class.java)
-                    } catch (t: Throwable) {
-                        UploadResponse(ok = false, error = "Invalid response")
-                    }
-                    val success = resp.isSuccessful && (parsed.ok)
-                    postToMain { callback(success, parsed) }
-                }
-            }
-        })
+        http.newCall(req).enqueue(defaultCallback(reqId, callback))
     }
 
-    // Fetch opening/closing for selected vehicle (used at app start/vehicle switch)
+    fun rolloverBalances(
+        @Suppress("UNUSED_PARAMETER") vehicle: String,
+        previousRequestId: String? = null,
+        callback: (success: Boolean, response: UploadResponse?, requestIdUsed: String) -> Unit
+    ) {
+        val reqId = previousRequestId ?: newReqId()
+        val payload = RolloverPayload(vehicle = "", requestId = reqId)
+        val body = gson.toJson(payload).toRequestBody(jsonMedia)
+        val req = Request.Builder()
+            .url(WEB_APP_URL)
+            .post(body)
+            .addHeader("Content-Type", "application/json")
+            .addHeader("X-API-KEY", API_KEY)
+            .build()
+        http.newCall(req).enqueue(defaultCallback(reqId, callback))
+    }
+
     fun fetchBalances(
         vehicle: String,
         callback: (success: Boolean, response: BalancesResponse?) -> Unit
@@ -171,17 +175,11 @@ object GoogleSheetsClient {
                 "?action=balances" +
                 "&vehicle=" + URLEncoder.encode(vehicle, "UTF-8") +
                 "&key=" + URLEncoder.encode(API_KEY, "UTF-8")
-
-        val req = Request.Builder()
-            .url(url)
-            .get()
-            .build()
-
+        val req = Request.Builder().url(url).get().build()
         http.newCall(req).enqueue(object : okhttp3.Callback {
             override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
                 postToMain { callback(false, BalancesResponse(ok = false, error = e.message)) }
             }
-
             override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
                 response.use { resp ->
                     val bodyStr = resp.body?.string().orEmpty()
@@ -196,6 +194,32 @@ object GoogleSheetsClient {
             }
         })
     }
+
+    /* ========== Internal Helpers ========== */
+
+    private fun defaultCallback(
+        requestIdUsed: String,
+        callback: (success: Boolean, response: UploadResponse?, requestIdUsed: String) -> Unit
+    ) = object : okhttp3.Callback {
+        override fun onFailure(call: okhttp3.Call, e: java.io.IOException) {
+            postToMain { callback(false, UploadResponse(ok = false, error = e.message), requestIdUsed) }
+        }
+        override fun onResponse(call: okhttp3.Call, response: okhttp3.Response) {
+            response.use { resp ->
+                val bodyStr = resp.body?.string().orEmpty()
+                val parsed = try {
+                    gson.fromJson(bodyStr, UploadResponse::class.java)
+                } catch (t: Throwable) {
+                    UploadResponse(ok = false, error = "Invalid response")
+                }
+                val success = resp.isSuccessful && (parsed.ok)
+                postToMain { callback(success, parsed, requestIdUsed) }
+            }
+        }
+    }
+
+    private fun newReqId(): String =
+        System.currentTimeMillis().toString() + "-" + UUID.randomUUID().toString().take(8)
 
     private fun postToMain(block: () -> Unit) {
         Handler(Looper.getMainLooper()).post(block)

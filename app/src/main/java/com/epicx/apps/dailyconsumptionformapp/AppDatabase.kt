@@ -6,7 +6,7 @@ import android.database.sqlite.SQLiteOpenHelper
 import java.io.File
 import androidx.core.database.sqlite.transaction
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", null, 3) { // version bumped to 3
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", null, 4) { // bump to 4
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
@@ -40,9 +40,20 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
                 stockAvailable INTEGER
             );
         """)
+        // NOTE: No global prepopulate here.
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        // Purani DB ko wipe karke nayi banani hai
+        if (oldVersion < 4) {
+            db.execSQL("DROP TABLE IF EXISTS medicines")
+            db.execSQL("DROP TABLE IF EXISTS upload_flags")
+            db.execSQL("DROP TABLE IF EXISTS compiled_summary")
+            onCreate(db)
+            return
+        }
+
+        // Legacy (future safety)
         if (oldVersion < 2) {
             db.execSQL("ALTER TABLE medicines ADD COLUMN storeIssued TEXT DEFAULT '0'")
         }
@@ -61,6 +72,39 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
                 );
             """)
         }
+    }
+
+    // Sirf selected vehicle ke liye medicines ko zero se seed karne ka helper
+    fun prepopulateMedicinesForVehicle(vehicleName: String, medicineList: List<String>) {
+        val db = writableDatabase
+        val cursor = db.rawQuery(
+            "SELECT medicineName FROM medicines WHERE vehicleName = ?",
+            arrayOf(vehicleName)
+        )
+        val existing = mutableSetOf<String>()
+        while (cursor.moveToNext()) {
+            existing.add(cursor.getString(0))
+        }
+        cursor.close()
+        db.transaction {
+            try {
+                for (med in medicineList) {
+                    if (!existing.contains(med)) {
+                        execSQL(
+                            "INSERT INTO medicines(vehicleName, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued) VALUES (?, ?, '0', '0', '0', '0', '0')",
+                            arrayOf(vehicleName, med)
+                        )
+                    }
+                }
+            } finally {
+            }
+        }
+    }
+
+    // OPTIONAL: Agar galti se multiple vehicles aa gaye hon to baqi sab delete karne ka helper
+    fun keepOnlyVehicleData(selectedVehicle: String) {
+        val db = writableDatabase
+        db.execSQL("DELETE FROM medicines WHERE vehicleName <> ?", arrayOf(selectedVehicle))
     }
 
     // CRUD for medicines
@@ -83,7 +127,63 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         db.execSQL("UPDATE medicines SET storeIssued=? WHERE vehicleName=? AND medicineName=?",
             arrayOf(issued, vehicle, medicine))
     }
+// Add anywhere inside AppDatabase class (e.g. near other CRUD helpers)
 
+    // Revert (delete) pending unsent consumption + emergency for a single medicine
+    fun revertPendingForMedicine(vehicle: String, medicine: String) {
+        val db = writableDatabase
+        val cursor = db.rawQuery(
+            "SELECT openingBalance, consumption, totalEmergency, closingBalance FROM medicines WHERE vehicleName=? AND medicineName=? LIMIT 1",
+            arrayOf(vehicle, medicine)
+        )
+        if (cursor.moveToFirst()) {
+            val opening = cursor.getString(0)?.toIntOrNull() ?: 0
+            val cons = cursor.getString(1)?.toIntOrNull() ?: 0
+            val emerg = cursor.getString(2)?.toIntOrNull() ?: 0
+            val closing = cursor.getString(3)?.toIntOrNull() ?: 0
+            // Revert idea: originalClosingBeforeSubmit = closing + cons + emerg
+            val restoredClosing = (closing + cons + emerg).coerceAtLeast(0)
+            db.execSQL(
+                "UPDATE medicines SET consumption='0', totalEmergency='0', closingBalance=? WHERE vehicleName=? AND medicineName=?",
+                arrayOf(restoredClosing.toString(), vehicle, medicine)
+            )
+        }
+        cursor.close()
+    }
+
+    // Apply edited pending values (adjust closing accordingly)
+    fun applyEditedPending(
+        vehicle: String,
+        medicine: String,
+        newConsumption: Int,
+        newEmergency: Int
+    ) {
+        val db = writableDatabase
+        val cursor = db.rawQuery(
+            "SELECT openingBalance, consumption, totalEmergency, closingBalance FROM medicines WHERE vehicleName=? AND medicineName=? LIMIT 1",
+            arrayOf(vehicle, medicine)
+        )
+        if (cursor.moveToFirst()) {
+            val opening = cursor.getString(0)?.toIntOrNull() ?: 0
+            // Strategy: Reconstruct base stock before pending changes:
+            val oldCons = cursor.getString(1)?.toIntOrNull() ?: 0
+            val oldEmerg = cursor.getString(2)?.toIntOrNull() ?: 0
+            val currentClosing = cursor.getString(3)?.toIntOrNull() ?: 0
+            val baseStock = currentClosing + oldCons + oldEmerg
+            val newClosing = (baseStock - newConsumption - newEmergency).coerceAtLeast(0)
+            db.execSQL(
+                "UPDATE medicines SET consumption=?, totalEmergency=?, closingBalance=? WHERE vehicleName=? AND medicineName=?",
+                arrayOf(
+                    newConsumption.toString(),
+                    newEmergency.toString(),
+                    newClosing.toString(),
+                    vehicle,
+                    medicine
+                )
+            )
+        }
+        cursor.close()
+    }
     fun getAllMedicines(): List<FormData> {
         val db = readableDatabase
         val cursor = db.rawQuery("SELECT vehicleName, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued FROM medicines", null)
@@ -103,7 +203,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         return list
     }
 
-    // NEW: Single-record getters to fix unresolved reference in FormActivity
     fun getMedicineOpening(vehicle: String, medicine: String): String {
         val db = readableDatabase
         val cursor = db.rawQuery(
@@ -126,7 +225,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         return value
     }
 
-    // Optional helper (not required by FormActivity but handy)
     fun getMedicineRecord(vehicle: String, medicine: String): FormData? {
         val db = readableDatabase
         val cursor = db.rawQuery(
@@ -204,42 +302,17 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         }
     }
 
-    fun prepopulateMedicinesForVehicle(vehicleName: String, medicineList: List<String>) {
-        val db = writableDatabase
-        val cursor = db.rawQuery(
-            "SELECT medicineName FROM medicines WHERE vehicleName = ?",
-            arrayOf(vehicleName)
-        )
-        val existing = mutableSetOf<String>()
-        while (cursor.moveToNext()) {
-            existing.add(cursor.getString(0))
-        }
-        cursor.close()
-        db.transaction {
-            try {
-                for (med in medicineList) {
-                    if (!existing.contains(med)) {
-                        execSQL(
-                            "INSERT INTO medicines(vehicleName, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued) VALUES (?, ?, '0', '0', '0', '0', '0')",
-                            arrayOf(vehicleName, med)
-                        )
-                    }
-                }
-            } finally {
-            }
-        }
-    }
-
     //----------- Compiled Summary CRUD ------------
 
+    // INT-only model now
     data class CompiledMedicineData(
         val medicineName: String,
-        val totalConsumption: Double,
-        val totalEmergency: Double,
-        val totalOpening: Double,
-        val totalClosing: Double,
-        val totalStoreIssued: Double,
-        val stockAvailable: String
+        val totalConsumption: Int,
+        val totalEmergency: Int,
+        val totalOpening: Int,
+        val totalClosing: Int,
+        val totalStoreIssued: Int,
+        val stockAvailable: Int
     )
 
     fun deleteAllCompiledSummary() {
@@ -268,7 +341,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
                         item.totalEmergency,
                         item.totalClosing,
                         item.totalStoreIssued,
-                        item.stockAvailable.toIntOrNull() ?: 0
+                        item.stockAvailable
                     )
                 )
             }

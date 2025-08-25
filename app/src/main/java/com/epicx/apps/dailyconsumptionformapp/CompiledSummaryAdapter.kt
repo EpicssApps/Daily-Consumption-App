@@ -4,7 +4,6 @@ import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
 import com.epicx.apps.dailyconsumptionformapp.databinding.ItemCompiledSummaryBinding
-import com.epicx.apps.dailyconsumptionformapp.FormConstants.specialDecimalMeds
 
 class CompiledSummaryAdapter(
     private val items: MutableList<CompiledMedicineDataWithId>,
@@ -25,19 +24,13 @@ class CompiledSummaryAdapter(
         return CompiledSummaryViewHolder(binding)
     }
 
-    // Format value for display (show "0" for all zero values)
+    // All integer formatting, with Examination Gloves pair conversion
     fun formatValue(medicineName: String, value: Double): String {
         return if (medicineName.trim().equals("Examination Gloves", ignoreCase = true)) {
-            val pairValue = (value / 2).toInt() // decimal part ignore, sirf integer
+            val pairValue = (value / 2).toInt()
             pairValue.toString()
         } else {
-            if (value == 0.0) {
-                "0"
-            } else if (value % 1.0 == 0.0) {
-                value.toInt().toString()
-            } else {
-                String.format("%.2f", value)
-            }
+            value.toInt().toString()
         }
     }
 

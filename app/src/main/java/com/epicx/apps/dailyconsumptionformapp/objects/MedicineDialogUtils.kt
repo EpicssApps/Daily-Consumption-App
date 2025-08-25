@@ -14,7 +14,7 @@ object MedicineDialogUtils {
      * Show a searchable medicine picker dialog.
      *
      * @param context The activity or context to use (usually 'this' from Activity).
-     * @param medicineList The list of all medicines.
+     * @param newMedicineList The list of all medicines.
      * @param editMedicine The EditText to set the selected medicine.
      */
     fun showMedicineDialog(

@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
-    tools:context=".FormActivity">
-
+    android:layout_height="match_parent">
 
     <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
         android:layout_gravity="center"
         android:orientation="vertical"
-        android:padding="18dp">
+        android:paddingTop="5dp"
+        android:paddingRight="18dp"
+        android:paddingLeft="18dp">
 
         <!-- Top Summary Row: Opening & Closing Balance & Store Issued -->
         <LinearLayout
@@ -176,7 +176,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:hint="@string/enter_consumption"
-            android:inputType="numberDecimal" />
+            android:inputType="number" />
 
         <!-- Total Emergency Label -->
         <TextView
@@ -232,6 +232,16 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Issue Medicine (RS1 only)" />
+            android:text="Add New Stock" />
+
+        <Button
+            android:id="@+id/btnSendToMonthly"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Medicine Send To Monthly Sheet" />
     </LinearLayout>
-</ScrollView>
+
+</RelativeLayout>
+
+<!--    Issue Medicine To Vehicles and RS-01-->
