@@ -19,12 +19,29 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                     ")"
         )
         db.execSQL("CREATE INDEX idx_issue_vehicle_uploaded ON issue_items(vehicle, uploaded)")
+
+        // NEW: cumulative RS-01 monthly consumption table
+        db.execSQL(
+            "CREATE TABLE rs01_monthly (" +
+                    "medicine TEXT PRIMARY KEY," +
+                    "qty INTEGER NOT NULL" +
+                    ")"
+        )
     }
 
-    override fun onUpgrade(db: SQLiteDatabase?, oldVersion: Int, newVersion: Int) {
-        // Future migrations if needed
+    override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
+        if (oldVersion < 2) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS rs01_monthly (" +
+                        "medicine TEXT PRIMARY KEY," +
+                        "qty INTEGER NOT NULL" +
+                        ")"
+            )
+        }
+        // Future migrations >2 yahan
     }
 
+    // ---------------- Issue Items (existing) ----------------
     fun insertIssue(vehicle: String?, medicine: String?, qty: Int): Long {
         val db = writableDatabase
         val cv = ContentValues()
@@ -73,7 +90,6 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
         db.execSQL(sb.toString())
     }
 
-    // NEW: Update single pending row (only if still unuploaded)
     fun updateIssueQty(id: Long, newQty: Int) {
         if (newQty <= 0) return
         writableDatabase.execSQL(
@@ -82,7 +98,6 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
         )
     }
 
-    // NEW: Delete single pending row (only if still unuploaded)
     fun deleteIssue(id: Long) {
         writableDatabase.execSQL(
             "DELETE FROM issue_items WHERE id=? AND uploaded=0",
@@ -90,8 +105,52 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
         )
     }
 
+    // ---------------- RS-01 Monthly Cumulative (NEW) ----------------
+
+    /**
+     * Add qty to cumulative monthly total for given medicine.
+     * If row not exists -> insert; else update += qty.
+     */
+    fun addOrIncrementRs01Monthly(medicine: String, qty: Int) {
+        if (qty <= 0) return
+        val db = writableDatabase
+        // Try update first
+        val updated = db.compileStatement(
+            "UPDATE rs01_monthly SET qty = qty + ? WHERE medicine = ?"
+        ).apply {
+            bindLong(1, qty.toLong())
+            bindString(2, medicine)
+        }.executeUpdateDelete()
+
+        if (updated == 0) {
+            val cv = ContentValues()
+            cv.put("medicine", medicine)
+            cv.put("qty", qty)
+            db.insert("rs01_monthly", null, cv)
+        }
+    }
+
+    /**
+     * Return all cumulative rows (medicine, qty)
+     */
+    fun getAllRs01Monthly(): List<Pair<String, Int>> {
+        val db = readableDatabase
+        val list = mutableListOf<Pair<String, Int>>()
+        val c = db.rawQuery("SELECT medicine, qty FROM rs01_monthly", null)
+        c.use {
+            while (it.moveToNext()) {
+                list.add(it.getString(0) to it.getInt(1))
+            }
+        }
+        return list
+    }
+
+    fun clearRs01Monthly() {
+        writableDatabase.execSQL("DELETE FROM rs01_monthly")
+    }
+
     companion object {
         const val DB_NAME = "issuedb.db"
-        const val DB_VER = 1
+        const val DB_VER = 2   // bumped to 2
     }
 }

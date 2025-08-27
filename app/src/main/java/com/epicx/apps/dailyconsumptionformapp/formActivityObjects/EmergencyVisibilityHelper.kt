@@ -15,20 +15,26 @@ object EmergencyVisibilityHelper {
         layoutStoreIssued: LinearLayout,
         issueToVehicles: Button,
         rs01Vehicle: String = "RS-01",
-        btnSendToMonthly: Button
+        btnSendToMonthly: Button,
+        btnSubmitDay: Button,
+        btnSubmit: Button
     ) {
         if (vehicle == rs01Vehicle) {
             editEmergency.visibility = View.GONE
             textEmergencyLabel.visibility = View.GONE
             layoutStoreIssued.visibility = View.VISIBLE
             issueToVehicles.visibility = View.VISIBLE
-            btnSendToMonthly.visibility = View.VISIBLE
+            btnSendToMonthly.visibility = View.GONE
+            btnSubmitDay.visibility = View.GONE
+            btnSubmit.visibility = View.GONE
         } else {
             editEmergency.visibility = View.VISIBLE
             textEmergencyLabel.visibility = View.VISIBLE
             layoutStoreIssued.visibility = View.GONE
             issueToVehicles.visibility = View.GONE
+            btnSubmitDay.visibility = View.VISIBLE
             btnSendToMonthly.visibility = View.GONE
+            btnSubmit.visibility = View.VISIBLE
         }
     }
 }

@@ -9,6 +9,7 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <!-- Vehicle -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -31,6 +32,7 @@
             android:textColor="#ffffff"
             android:visibility="visible" />
 
+        <!-- Medicine Picker -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -48,6 +50,7 @@
             android:hint="Search / Select Medicine"
             android:inputType="none" />
 
+        <!-- Quantity -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -69,6 +72,7 @@
             android:layout_marginTop="16dp"
             android:text="Save (Local)" />
 
+        <!-- Pending Summary -->
         <TextView
             android:id="@+id/tvPendingTitle"
             android:layout_width="wrap_content"
@@ -91,21 +95,38 @@
             android:scrollbars="vertical"
             android:text="No pending items."
             android:textColor="#ffffff"
-            android:textIsSelectable="false"
             android:textSize="14sp" />
 
-        <!-- NEW Manage Button -->
         <Button
             android:id="@+id/btnManage"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Manage / Edit Pending" />
+            android:text="Delete or Edit Pending items" />
 
         <Button
             android:id="@+id/btnUpload"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Upload to Google Sheet" />
+            android:text="Upload to Vehicle" />
+
+        <!-- Daily Submit (FormActivity style) -->
+        <Button
+            android:id="@+id/btnSubmitRs01Consumption"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Submit Day (RS-01)"
+            android:visibility="gone" />
+
+        <!-- Monthly (FormActivity style) -->
+        <Button
+            android:id="@+id/btnMonthlyFromStore"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Send RS-01 To Monthly Sheet"
+            android:visibility="gone" />
+
     </LinearLayout>
 </ScrollView>

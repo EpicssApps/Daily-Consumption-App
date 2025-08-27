@@ -11,8 +11,6 @@ import android.net.NetworkCapabilities
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
-import android.view.Menu
-import android.view.MenuItem
 import android.view.View
 import android.view.ViewTreeObserver
 import android.widget.*
@@ -119,7 +117,6 @@ class FormActivity : AppCompatActivity() {
         val vehicleAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, vehicleList)
         vehicleAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         vehicleSpinner.adapter = vehicleAdapter
-
         NetworkMonitor.init(applicationContext)
 
         getAppVersionName()
@@ -278,8 +275,10 @@ class FormActivity : AppCompatActivity() {
                         vehicle = defaultVehicle,
                         layoutStoreIssued = layoutStoreIssued,
                         issueToVehicles = issueToVehicles,
-                        btnSendToMonthly = btnSendToMonthly
-                    )
+                        btnSendToMonthly = btnSendToMonthly,
+                        btnSubmitDay = btnSubmitDay,
+                        btnSubmit = btnSubmit
+                        )
                     attemptInitialSync(showLoading = true)
                 }
             )
@@ -294,7 +293,9 @@ class FormActivity : AppCompatActivity() {
                 vehicle = defaultVehicle,
                 layoutStoreIssued = layoutStoreIssued,
                 issueToVehicles = issueToVehicles,
-                btnSendToMonthly = btnSendToMonthly
+                btnSendToMonthly = btnSendToMonthly,
+                btnSubmitDay = btnSubmitDay,
+                btnSubmit = btnSubmit
             )
             attemptInitialSync(showLoading = false)
         }
@@ -606,6 +607,8 @@ class FormActivity : AppCompatActivity() {
    Replace your existing performDaySubmit in FormActivity with this version.
    (Everything else in the activity remains the same as your current file.)
 */
+
+
     private fun performDaySubmit(
         vehicle: String,
         toSend: List<GoogleSheetsClient.SubmitItem>,
