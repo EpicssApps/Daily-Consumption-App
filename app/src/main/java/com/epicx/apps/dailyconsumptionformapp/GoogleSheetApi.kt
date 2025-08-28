@@ -29,7 +29,7 @@ object GoogleSheetApi {
     private const val RS01_BASE_URL = "https://script.google.com/macros/s/AKfycbxkSEx1RKyt0oRPVgQwdWhhKLu9EmOtij9I8pUwa5IytaPXyTM7AnQUUT0_ER8sKqlCOQ/exec"
 
     // NEW sheet (no date column) – put the deployment URL of Code.gs (with allRows action)
-    private const val NEW_STOCK_URL = "https://script.google.com/macros/s/AKfycbw_tkfECdcd1_Cyrhegb1ELv30--u_lnhp6F2Hz_kF80i43yKm5eNYeILGehEyQ4BdyBQ/exec"
+    private const val NEW_STOCK_URL = "https://script.google.com/macros/s/AKfycbzoknsv3y30lpq5m4R5e_ykGBs6ZPhzm0_a-_Lxtka-qlc-traF7o8xTdXPyO-H0lpoKA/exec"
     // If different, replace above.
 
     private val shiftAmbulances = listOf(

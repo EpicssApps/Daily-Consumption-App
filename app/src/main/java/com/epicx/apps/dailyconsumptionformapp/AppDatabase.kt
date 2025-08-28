@@ -202,7 +202,30 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         cursor.close()
         return list
     }
-
+    // Add this helper inside AppDatabase class (anywhere near other CRUD helpers)
+    fun getMedicinesForVehicle(vehicle: String): List<FormData> {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT vehicleName, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued FROM medicines WHERE vehicleName=?",
+            arrayOf(vehicle)
+        )
+        val list = mutableListOf<FormData>()
+        while (cursor.moveToNext()) {
+            list.add(
+                FormData(
+                    vehicleName = cursor.getString(0),
+                    medicineName = cursor.getString(1),
+                    openingBalance = cursor.getString(2),
+                    consumption = cursor.getString(3),
+                    totalEmergency = cursor.getString(4),
+                    closingBalance = cursor.getString(5),
+                    storeIssued = cursor.getString(6) ?: "0"
+                )
+            )
+        }
+        cursor.close()
+        return list
+    }
     fun getMedicineOpening(vehicle: String, medicine: String): String {
         val db = readableDatabase
         val cursor = db.rawQuery(

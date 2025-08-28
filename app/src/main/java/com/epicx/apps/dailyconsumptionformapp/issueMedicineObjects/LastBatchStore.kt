@@ -4,6 +4,7 @@ import android.content.Context
 import com.epicx.apps.dailyconsumptionformapp.GoogleSheetsClient
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import androidx.core.content.edit
 
 object LastBatchStore {
     private const val PREF = "rs01_last_batch_pref"
@@ -13,9 +14,9 @@ object LastBatchStore {
     fun save(context: Context, list: List<GoogleSheetsClient.SubmitItem>) {
         val json = gson.toJson(list)
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-            .edit()
-            .putString(KEY, json)
-            .apply()
+            .edit {
+                putString(KEY, json)
+            }
     }
 
     fun load(context: Context): List<GoogleSheetsClient.SubmitItem> {
@@ -31,8 +32,8 @@ object LastBatchStore {
 
     fun clear(context: Context) {
         context.getSharedPreferences(PREF, Context.MODE_PRIVATE)
-            .edit()
-            .remove(KEY)
-            .apply()
+            .edit {
+                remove(KEY)
+            }
     }
 }

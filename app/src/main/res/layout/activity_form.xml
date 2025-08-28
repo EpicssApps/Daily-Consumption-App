@@ -240,6 +240,12 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="Medicine Send To Monthly Sheet" />
+        <Button
+            android:id="@+id/btn_reset_vehicle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Reset Vehicle" />
     </LinearLayout>
 
 </RelativeLayout>

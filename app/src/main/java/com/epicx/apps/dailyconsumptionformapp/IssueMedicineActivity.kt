@@ -149,7 +149,7 @@ class IssueMedicineActivity : AppCompatActivity() {
                 toast("Only RS-01 user.")
                 return@setOnClickListener
             }
-            UploadMenuHelper.handleRs01Upload(
+            UploadMenuHelper.Rs01UploadOnMonthlySheet(
                 activity = this,
                 db = mainDb,
                 defaultVehicle = "RS-01",

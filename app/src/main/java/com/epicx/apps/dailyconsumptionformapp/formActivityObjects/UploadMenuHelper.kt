@@ -11,7 +11,7 @@ import com.epicx.apps.dailyconsumptionformapp.tempStorage.TempRs01DailyStore
 
 object UploadMenuHelper {
 
-    fun handleRs01Upload(
+    fun Rs01UploadOnMonthlySheet(
         activity: AppCompatActivity,
         db: AppDatabase,
         defaultVehicle: String,
