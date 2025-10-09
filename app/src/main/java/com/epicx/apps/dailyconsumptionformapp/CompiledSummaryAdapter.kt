@@ -24,14 +24,9 @@ class CompiledSummaryAdapter(
         return CompiledSummaryViewHolder(binding)
     }
 
-    // All integer formatting, with Examination Gloves pair conversion
+    // Display values exactly as stored in DB (no halving)
     fun formatValue(medicineName: String, value: Double): String {
-        return if (medicineName.trim().equals("Examination Gloves", ignoreCase = true)) {
-            val pairValue = (value / 2).toInt()
-            pairValue.toString()
-        } else {
-            value.toInt().toString()
-        }
+        return value.toInt().toString()
     }
 
     override fun onBindViewHolder(holder: CompiledSummaryViewHolder, position: Int) {

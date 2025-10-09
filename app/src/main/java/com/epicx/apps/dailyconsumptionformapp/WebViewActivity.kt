@@ -7,8 +7,10 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
 import android.widget.TextView
-import android.widget.Toast
+import kotlinx.coroutines.delay
 import androidx.appcompat.app.AppCompatActivity
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 class WebViewActivity : AppCompatActivity() {
     @SuppressLint("SetJavaScriptEnabled")
@@ -27,7 +29,7 @@ class WebViewActivity : AppCompatActivity() {
         val closing = intent.getStringExtra("closing")
         val storeIssuedMainStore = intent.getStringExtra("storeIssued")
         val stockAvailableBeforeIssue = intent.getStringExtra("stockAvailable")
-        
+
         val tvMedicineName = findViewById<TextView>(R.id.tvMedicineName)
         tvMedicineName.text = medicine ?: "Medicine Name"
 
@@ -40,21 +42,72 @@ class WebViewActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 progressBar.visibility = View.GONE
-                // Calculate yesterday's date in yyyy-MM-dd format
-                val cal = java.util.Calendar.getInstance()
-                cal.add(java.util.Calendar.DATE, -1)
-                val sdf = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US)
-                val prevDate = sdf.format(cal.time)
 
-                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[0]; el.value = '${prevDate}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
-                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[1]; el.value = '${combineOpeningBalance}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
-                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[2]; el.value = '${storeIssuedMainStore}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
-                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[3]; el.value = '${stockAvailableBeforeIssue}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
-                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[4]; el.value = '${consumption}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
-                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[5]; el.value = '${emergency}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
-                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[6]; el.value = '${closing}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
+                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[0]; el.value = '${consumption}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
+                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[1]; el.value = '${emergency}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
+                view?.loadUrl("javascript:(function(){ var el = document.getElementsByClassName('whsOnd zHQkBf')[2]; el.value = '${closing}'; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); })()")
 
-                // ... your other logic (like hiding loader)
+                    // Division
+                lifecycleScope.launch {
+                    delay(1000)
+                    view?.loadUrl(
+                        "javascript:(function(){" +
+                                "document.getElementsByClassName('vRMGwf oJeWuf')[0].click();" +
+                                "setTimeout(function(){" +
+                                "var options = document.querySelectorAll('[role=\"option\"]');" +
+                                "for (var i = 0; i < options.length; i++) {" +
+                                "if (options[i].innerText.trim() === 'BAHAWALPUR') { options[i].click(); break; }" +
+                                "}" +
+                                "}, 500);" +
+                                "})()"
+                    )
+                }
+                // Select District
+                lifecycleScope.launch {
+                    delay(1000)
+                    view?.loadUrl(
+                        "javascript:(function(){" +
+                                "document.getElementsByClassName('MocG8c HZ3kWc mhLiyf LMgvRb KKjvXb DEh1R')[0].click();" +
+                                "setTimeout(function(){" +
+                                "var options = document.querySelectorAll('[role=\"option\"]');" +
+                                "for (var i = 0; i < options.length; i++) {" +
+                                "if (options[i].innerText.trim() === 'BAHAWALNAGAR') { options[i].click(); break; }" +
+                                "}" +
+                                "}, 500);" +
+                                "})()"
+                    )
+                }
+//                Select Tehsil
+                lifecycleScope.launch {
+                    delay(1000)
+                    view?.loadUrl(
+                        "javascript:(function(){" +
+                                "document.getElementsByClassName('vRMGwf oJeWuf')[0].click();" +
+                                "setTimeout(function(){" +
+                                "var options = document.querySelectorAll('[role=\"option\"]');" +
+                                "for (var i = 0; i < options.length; i++) {" +
+                                "if (options[i].innerText.trim() === 'Bahawalnagar (Central Station)') { options[i].click(); break; }" +
+                                "}" +
+                                "}, 500);" +
+                                "})()"
+                    )
+                }
+                // Select Medicine Name
+                lifecycleScope.launch {
+                    delay(1000)
+                    view?.loadUrl(
+                        "javascript:(function(){" +
+                                "document.getElementsByClassName('vRMGwf oJeWuf')[0].click();" +
+                                "setTimeout(function(){" +
+                                "var options = document.querySelectorAll('[role=\"option\"]');" +
+                                "for (var i = 0; i < options.length; i++) {" +
+                                "if (options[i].innerText.trim() === '${medicine}') { options[i].click(); break; }" +
+                                "}" +
+                                "}, 500);" +
+                                "})()"
+                    )
+                }
+
                 super.onPageFinished(view, url)
             }
         }

@@ -119,14 +119,5 @@
             android:text="Submit Day (RS-01)"
             android:visibility="gone" />
 
-        <!-- Monthly (FormActivity style) -->
-        <Button
-            android:id="@+id/btnMonthlyFromStore"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Send RS-01 To Monthly Sheet"
-            android:visibility="gone" />
-
     </LinearLayout>
 </ScrollView>

@@ -13,8 +13,8 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 
 object GoogleSheetsClient {
-
-    private const val WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxn5u8Dn3dUHicnXcGks-__ZYR0TjuLtHsUXfXN8kZsf0SCHg2slaaRp1qKJAxgrV6KhQ/exec"
+    // NEW sheet
+    private const val WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxC8wC46MH_om4m_Iuq0l6rJ1sUmlzOkb6oLbyZLO1muAewZUPX8-jq1XvJdjmEsK5i-w/exec"
     private const val API_KEY = "8k4jd723lkdc723pos57"
 
     private val gson = Gson()

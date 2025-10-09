@@ -18,4 +18,11 @@
     <string name="enter_closing_balance">Read Only</string>
     <string name="save">Save</string>
     <string name="summary">Summary</string>
+    <string name="daily_consumption_for_15_days">Daily Consumption For 15 days</string>
+    <string name="ssk_file">SSK File</string>
+    <string name="dataactivity">DataActivity</string>
+    <string name="daily_consumption">Daily Consumption</string>
+    <string name="download_sheet">Download Sheet</string>
+    <string name="monthly_consumption">Monthly Consumption</string>
+    <string name="rollover_day">Rollover Day</string>
 </resources>

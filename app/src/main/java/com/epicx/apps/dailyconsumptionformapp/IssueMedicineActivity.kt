@@ -12,7 +12,6 @@ import androidx.appcompat.app.AppCompatActivity
 import com.epicx.apps.dailyconsumptionformapp.FormConstants.newMedicineList
 import com.epicx.apps.dailyconsumptionformapp.FormConstants.vehicleList
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.PendingRequestCache
-import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.UploadMenuHelper
 import com.epicx.apps.dailyconsumptionformapp.objects.MedicineDialogUtils
 import com.epicx.apps.dailyconsumptionformapp.tempStorage.TempRs01DailyStore
 
@@ -28,8 +27,6 @@ class IssueMedicineActivity : AppCompatActivity() {
     private lateinit var tvPendingTitle: TextView
     private lateinit var tvPendingList: TextView
     private lateinit var btnSubmitRs01Consumption: Button
-    private lateinit var btnMonthlyFromStore: Button
-
     private lateinit var issueDb: DBHelper
     private lateinit var mainDb: AppDatabase
 
@@ -65,7 +62,6 @@ class IssueMedicineActivity : AppCompatActivity() {
         tvPendingTitle = findViewById(R.id.tvPendingTitle)
         tvPendingList = findViewById(R.id.tvPendingList)
         btnSubmitRs01Consumption = findViewById(R.id.btnSubmitRs01Consumption)
-        btnMonthlyFromStore = findViewById(R.id.btnMonthlyFromStore)
 
         tvPendingList.movementMethod = ScrollingMovementMethod()
         tvPendingList.setOnTouchListener { v, event ->
@@ -106,7 +102,6 @@ class IssueMedicineActivity : AppCompatActivity() {
             }
 
             btnSubmitRs01Consumption.visibility = View.VISIBLE
-            btnMonthlyFromStore.visibility = View.VISIBLE
         } else {
             spVehicle.visibility = View.GONE
             tvVehicleStatic.visibility = View.VISIBLE
@@ -118,7 +113,6 @@ class IssueMedicineActivity : AppCompatActivity() {
             tvVehicleStatic.text = selectedVehicle.ifBlank { "Vehicle N/A" }
             updateUploadButtonText()
             btnSubmitRs01Consumption.visibility = View.GONE
-            btnMonthlyFromStore.visibility = View.GONE
         }
     }
 
@@ -142,19 +136,6 @@ class IssueMedicineActivity : AppCompatActivity() {
 
         btnSubmitRs01Consumption.setOnClickListener {
             handleDailySubmitLikeFormActivity()
-        }
-
-        btnMonthlyFromStore.setOnClickListener {
-            if (!isRs01User) {
-                toast("Only RS-01 user.")
-                return@setOnClickListener
-            }
-            UploadMenuHelper.Rs01UploadOnMonthlySheet(
-                activity = this,
-                db = mainDb,
-                defaultVehicle = "RS-01",
-                getShiftTag = { getShiftTag() }
-            )
         }
     }
 
@@ -662,7 +643,6 @@ class IssueMedicineActivity : AppCompatActivity() {
         btnUpload.isEnabled = enabled
         btnManage.isEnabled = enabled
         btnSubmitRs01Consumption.isEnabled = enabled
-        btnMonthlyFromStore.isEnabled = enabled
     }
 
     private fun showProgress(message: String): AlertDialog {

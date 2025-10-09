@@ -29,7 +29,7 @@ object GoogleSheetApi {
     private const val RS01_BASE_URL = "https://script.google.com/macros/s/AKfycbxkSEx1RKyt0oRPVgQwdWhhKLu9EmOtij9I8pUwa5IytaPXyTM7AnQUUT0_ER8sKqlCOQ/exec"
 
     // NEW sheet (no date column) – put the deployment URL of Code.gs (with allRows action)
-    private const val NEW_STOCK_URL = "https://script.google.com/macros/s/AKfycbxn5u8Dn3dUHicnXcGks-__ZYR0TjuLtHsUXfXN8kZsf0SCHg2slaaRp1qKJAxgrV6KhQ/exec"
+    private const val NEW_STOCK_URL = "https://script.google.com/macros/s/AKfycbxC8wC46MH_om4m_Iuq0l6rJ1sUmlzOkb6oLbyZLO1muAewZUPX8-jq1XvJdjmEsK5i-w/exec"
     // If different, replace above.
 
     private val shiftAmbulances = listOf(
@@ -99,72 +99,6 @@ object GoogleSheetApi {
                 value == ".0" || value == "0.0" || value == ".00" ||
                 value.toDoubleOrNull() == 0.0
 
-    suspend fun bulkUpload(date: String, data: List<FormData>): Result<Unit> =
-        withContext(Dispatchers.IO) {
-            val shiftTag = getShiftTag()
-            val appVersion = "V09"
-            val zeroBalances = (shiftTag != null && (shiftTag == "Morning" || shiftTag == "Evening" || shiftTag == "Early Morning"))
-
-            val modifiedList = data.map { fd ->
-                val safeOpening = safeNumberString(fd.openingBalance)
-                val safeConsumption = safeNumberString(fd.consumption)
-                val safeTotalEmergency = safeNumberString(fd.totalEmergency)
-                val safeClosing = safeNumberString(fd.closingBalance)
-                val safeStockAvailable = safeNumberString(fd.stockAvailable)
-
-                val newVehicleName = if (fd.vehicleName in shiftAmbulances && shiftTag != null) {
-                    "${fd.vehicleName} $shiftTag $appVersion"
-                } else fd.vehicleName
-
-                if (fd.vehicleName in shiftAmbulances && zeroBalances) {
-                    fd.copy(
-                        vehicleName = newVehicleName,
-                        date = date,
-                        openingBalance = "0",
-                        closingBalance = "0",
-                        consumption = safeConsumption,
-                        totalEmergency = safeTotalEmergency,
-                        stockAvailable = safeStockAvailable
-                    )
-                } else {
-                    fd.copy(
-                        vehicleName = newVehicleName,
-                        date = date,
-                        openingBalance = safeOpening,
-                        closingBalance = safeClosing,
-                        consumption = safeConsumption,
-                        totalEmergency = safeTotalEmergency,
-                        stockAvailable = safeStockAvailable
-                    )
-                }
-            }.filter { fd ->
-                !(isZero(fd.openingBalance) &&
-                        isZero(fd.consumption) &&
-                        isZero(fd.totalEmergency) &&
-                        isZero(fd.closingBalance))
-            }
-
-            val jsonAdapter = moshi.adapter<List<FormData>>(
-                Types.newParameterizedType(List::class.java, FormData::class.java)
-            )
-            val body = RequestBody.create(
-                "application/json; charset=utf-8".toMediaTypeOrNull(),
-                jsonAdapter.toJson(modifiedList)
-            )
-            val url = "$BASE_URL?action=bulkUpload&date=$date"
-            val request = Request.Builder().url(url).post(body).build()
-            try {
-                client.newCall(request).execute().use { response ->
-                    val respBody = response.body?.string()
-                    Log.d("SheetApi", "BULK POST: code=${response.code} | body=$respBody")
-                    if (response.isSuccessful) Result.success(Unit)
-                    else Result.failure(IOException("Bulk upload failed: ${response.code} ${response.message} Body: $respBody"))
-                }
-            } catch (e: Exception) {
-                Log.e("SheetApi", "Exception in bulkUpload", e)
-                Result.failure(e)
-            }
-        }
 
     suspend fun rs01BulkUpload(date: String, data: List<FormData>): Result<Unit> =
         withContext(Dispatchers.IO) {

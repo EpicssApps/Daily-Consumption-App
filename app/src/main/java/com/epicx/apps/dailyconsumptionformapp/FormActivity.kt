@@ -23,7 +23,6 @@ import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.EmergencyVisib
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.MedicineSubmitHelper
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.StoreIssuedHelper
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.SyncFromServerHelper
-import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.UploadMenuHelper
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.VehicleSelectHelper
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.PendingRequestCache
 import com.epicx.apps.dailyconsumptionformapp.objects.MedicineDialogUtils
@@ -236,15 +235,6 @@ class FormActivity : AppCompatActivity() {
                 onDeletePersist = { med ->
                     db.revertPendingForMedicine(defaultVehicle, med)
                 }
-            )
-        }
-
-        btnSendToMonthly.setOnClickListener {
-            UploadMenuHelper.Rs01UploadOnMonthlySheet(
-                activity = this,
-                db = db,
-                defaultVehicle = defaultVehicle,
-                getShiftTag = { getShiftTag() }
             )
         }
 

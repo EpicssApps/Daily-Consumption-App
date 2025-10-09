@@ -12,14 +12,8 @@ class CompiledSummaryActivity : AppCompatActivity() {
     private lateinit var db: AppDatabase
     private lateinit var adapter: CompiledSummaryAdapter
 
-    // All integer display; Examination Gloves -> pairs
-    private fun formatValue(medicineName: String, value: Double): String {
-        return if (medicineName.trim().equals("Examination Gloves in Numbers", ignoreCase = true)) {
-            (value / 2).toInt().toString()
-        } else {
-            value.toInt().toString()
-        }
-    }
+    // Display values exactly as stored in DB (no halving)
+    private fun formatValue(value: Double): String = value.toInt().toString()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,11 +34,11 @@ class CompiledSummaryActivity : AppCompatActivity() {
                 val intent = Intent(this, WebViewActivity::class.java)
                 intent.putExtra("medicineName", item.medicineName)
                 intent.putExtra("date", item.date)
-                intent.putExtra("opening", formatValue(item.medicineName, item.totalOpening))
-                intent.putExtra("consumption", formatValue(item.medicineName, item.totalConsumption))
+                intent.putExtra("opening", formatValue(item.totalOpening))
+                intent.putExtra("consumption", formatValue(item.totalConsumption))
                 intent.putExtra("emergency", item.totalEmergency.toInt().toString())
-                intent.putExtra("closing", formatValue(item.medicineName, item.totalClosing))
-                intent.putExtra("storeIssued", formatValue(item.medicineName, item.totalStoreIssued))
+                intent.putExtra("closing", formatValue(item.totalClosing))
+                intent.putExtra("storeIssued", formatValue(item.totalStoreIssued))
                 intent.putExtra("stockAvailable", item.stockAvailable)
                 startActivity(intent)
             }

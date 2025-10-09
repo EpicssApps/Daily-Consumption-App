@@ -23,9 +23,6 @@ import com.epicx.apps.dailyconsumptionformapp.objects.SummaryEditDialog
 import com.epicx.apps.dailyconsumptionformapp.summaryActivityObjects.StockCsvExporter
 import kotlinx.coroutines.launch
 import java.io.File
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 
 class SummaryActivity : AppCompatActivity() {
 
@@ -193,28 +190,15 @@ class SummaryActivity : AppCompatActivity() {
 
         binding.btnRollover.setOnClickListener { showRolloverConfirm() }
 
-        binding.btnDailyConsumptionCompile.setOnClickListener {
+        binding.btnMonthlyCompile.setOnClickListener {
             compileCurrentSheet()
         }
-
-  /*      binding.btnMonthlyConsumption.setOnClickListener {
-            // Monthly consumption logically RS-01 only, but passing currentVehicle if RS-01 selected
-            MonthlyConsumptionHelper.showMonthPickerAndReport(
-                this@SummaryActivity,
-                binding.progressBar,
-                vehicleName = if (currentVehicle.isBlank()) "RS-01" else currentVehicle
-            )
-        }*/
 
         binding.btnCompiledSummary.setOnClickListener {
             startActivity(Intent(this, CompiledSummaryActivity::class.java))
         }
-
         binding.btnSskFile.setOnClickListener {
             exportSskFile()
-        }
-        binding.btnfifteenDaysConsumption.setOnClickListener{
-            fifteenDaysCompileSheet()
         }
     }
 
@@ -288,14 +272,38 @@ class SummaryActivity : AppCompatActivity() {
             applySearchFilter(binding.searchViewSummary.query?.toString())
         }
     }
+    private fun exportSskFile() {
+        val compiledList = db.getAllCompiledSummary()
+        val latestDate = compiledList.firstOrNull()?.date
+        if (latestDate == null) {
+            Toast.makeText(this, "Koi compiled summary nahi mili!", Toast.LENGTH_LONG).show()
+            return
+        }
+        val fileName = "ssk_file_${latestDate}.csv"
+        val file = File(getExternalFilesDir(null), fileName)
+        val ok = CsvExportUtils.exportSskSelectedMedicinesCsv(file, sskExportOrder, compiledList)
+        if (!ok) {
+            Toast.makeText(this, "Export Failed!", Toast.LENGTH_LONG).show()
+            return
+        }
+        val uri = FileProvider.getUriForFile(
+            this,
+            "${applicationContext.packageName}.fileprovider",
+            file
+        )
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/csv"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        startActivity(Intent.createChooser(shareIntent, "Share CSV via"))
+        Toast.makeText(this, "SSK file export ho gayi: $fileName", Toast.LENGTH_LONG).show()
+    }
 
     private fun applyVehicleUiMode() {
         val labelStoreIssued = findViewById<TextView>(R.id.label_summary_store_issued)
-        val btnCompile = binding.btnDailyConsumptionCompile
-        val btnFifteenDaysCompile = binding.btnfifteenDaysConsumption
+        val btnMonthlyCompile = binding.btnMonthlyCompile
         val btnCompiledSummary = binding.btnCompiledSummary
-        val btnSskFile = binding.btnSskFile
-//        val btnMonthlyConsumption = binding.btnMonthlyConsumption
         val btnRollover = binding.btnRollover
         val btnDownload = binding.btnDownloadCsv
         val labelEmergency = findViewById<TextView>(R.id.label_summary_emergency)
@@ -306,22 +314,16 @@ class SummaryActivity : AppCompatActivity() {
         if (isRs01) {
             labelEmergency?.visibility = View.GONE
             labelStoreIssued?.visibility = View.VISIBLE
-            btnCompile.visibility = View.VISIBLE
-            btnFifteenDaysCompile.visibility = View.VISIBLE
+            btnMonthlyCompile.visibility = View.VISIBLE
             btnCompiledSummary.visibility = View.VISIBLE
-            btnSskFile.visibility = View.VISIBLE
-//            btnMonthlyConsumption.visibility = View.VISIBLE
             btnRollover.visibility = View.VISIBLE
             btnDownload.visibility = View.VISIBLE
         } else {
             labelEmergency?.visibility = View.VISIBLE
             labelStoreIssued?.visibility = View.GONE
             // Non RS-01: hide special buttons
-            btnCompile.visibility = View.GONE
-            btnFifteenDaysCompile.visibility = View.GONE
+            btnMonthlyCompile.visibility = View.GONE
             btnCompiledSummary.visibility = View.GONE
-            btnSskFile.visibility = View.GONE
-//            btnMonthlyConsumption.visibility = View.GONE
             btnRollover.visibility = View.GONE
             btnDownload.visibility = View.GONE
         }
@@ -432,111 +434,6 @@ class SummaryActivity : AppCompatActivity() {
             // val source = if (currentVehicle.isBlank()) list else list.filter { it.vehicleName.equals(currentVehicle, true) }
             val source = list
 
-            val medicineNameMapping = mapOf(
-                "Polymyxin B Sulphate Skin (20 gm)" to "Polymyxin B Sulphate Skin Ointment with lignocaine (20 gm)",
-                "Neomycin Sulphate 0.5%" to "Neomycin Sulphate 0.5%, bacitracin zinc"
-            )
-            fun parseInt(s: String?): Int = s?.toDoubleOrNull()?.toInt() ?: 0
-
-            val grouped = source.groupBy {
-                medicineNameMapping[it.medicineName.trim()] ?: it.medicineName.trim()
-            }
-
-            val compiledList = grouped.map { (medName, rows) ->
-                val totalOpening = rows.sumOf { parseInt(it.openingBalance) }
-                val totalConsumption = rows.sumOf { parseInt(it.consumption) }
-                val totalEmergency = rows.sumOf { parseInt(it.totalEmergency) }
-                val totalStoreIssued = rows.sumOf { parseInt(it.storeIssued) }
-                val totalClosing = totalOpening - totalConsumption
-                val stockAvailable = rows
-                    .filter { it.vehicleName.equals("RS-01", ignoreCase = true) }
-                    .map { parseInt(it.stockAvailable) }
-                    .firstOrNull() ?: 0
-
-                AppDatabase.CompiledMedicineData(
-                    medicineName = medName,
-                    totalConsumption = totalConsumption,
-                    totalEmergency = totalEmergency,
-                    totalOpening = totalOpening,
-                    totalClosing = totalClosing,
-                    totalStoreIssued = totalStoreIssued,
-                    stockAvailable = stockAvailable
-                )
-            }
-
-            val pseudoDate = "CURRENT"
-            db.insertCompiledSummary(pseudoDate, compiledList)
-
-            AlertDialog.Builder(this@SummaryActivity)
-                .setTitle("Compiled Summary (All Current Rows)")
-                .setMessage(buildString {
-                    append("Medicine, Opening, Consumption, Emergency, Closing, Store Issued, Stock Available\n")
-                    compiledList.forEach {
-                        append("${it.medicineName}, ${it.totalOpening}, ${it.totalConsumption}, ${it.totalEmergency}, ${it.totalClosing}, ${it.totalStoreIssued}, ${it.stockAvailable}\n")
-                    }
-                })
-                .setPositiveButton("Export as CSV") { _, _ ->
-                    try {
-                        val fileName = "RS-01_Daily_Consumption_${todayDate()}.csv"
-                        val file = File(getExternalFilesDir(null), fileName)
-                        file.printWriter().use { out ->
-                            out.println("MedicineName,TotalOpening,TotalConsumption,TotalEmergency,TotalClosing,TotalStoreIssued,StockAvailable")
-                            for (item in compiledList) {
-                                out.println("${item.medicineName},${item.totalOpening},${item.totalConsumption},${item.totalEmergency},${item.totalClosing},${item.totalStoreIssued},${item.stockAvailable}")
-                            }
-                        }
-                        val uri = FileProvider.getUriForFile(
-                            this@SummaryActivity,
-                            "${applicationContext.packageName}.fileprovider",
-                            file
-                        )
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        startActivity(Intent.createChooser(shareIntent, "CSV file share karen..."))
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            "CSV export ho gaya: $fileName",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            "Export failed: ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-                .setNegativeButton("Close", null)
-                .show()
-        }
-    }
-
-    private fun fifteenDaysCompileSheet() {
-        binding.progressBar.visibility = View.VISIBLE
-        lifecycleScope.launch {
-            val result = GoogleSheetApi.getAllCurrentStock()
-            binding.progressBar.visibility = View.GONE
-            if (!result.isSuccess) {
-                Toast.makeText(
-                    this@SummaryActivity,
-                    "Failed to fetch data: ${result.exceptionOrNull()?.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@launch
-            }
-            val list = result.getOrNull() ?: emptyList()
-            if (list.isEmpty()) {
-                Toast.makeText(this@SummaryActivity, "Koi data nahi mila!", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            // (Optional) Filter to currentVehicle if you want per-vehicle compile
-            // val source = if (currentVehicle.isBlank()) list else list.filter { it.vehicleName.equals(currentVehicle, true) }
-            val source = list
-
             // Ye mapping sirf DB compile ke liye pehle jaise rakha hai (unchanged)
             val medicineNameMapping = mapOf(
                 "Polymyxin B Sulphate Skin (20 gm)" to "Polymyxin B Sulphate Skin Ointment with lignocaine (20 gm)",
@@ -589,7 +486,7 @@ class SummaryActivity : AppCompatActivity() {
                 })
                 .setPositiveButton("Export as CSV") { _, _ ->
                     try {
-                        val fileName = "Fifteen_Daily_Consumption_${todayDate()}.csv"
+                        val fileName = "compiled_medicines_${System.currentTimeMillis()}.csv"
                         val file = File(getExternalFilesDir(null), fileName)
 
                         // Helpers
@@ -708,36 +605,6 @@ class SummaryActivity : AppCompatActivity() {
         }
     }
 
-    fun todayDate(): String =
-        SimpleDateFormat("dd-MM-yyyy", Locale.US).format(Date())
-
-    private fun exportSskFile() {
-        val compiledList = db.getAllCompiledSummary()
-        val latestDate = compiledList.firstOrNull()?.date
-        if (latestDate == null) {
-            Toast.makeText(this, "Koi compiled summary nahi mili!", Toast.LENGTH_LONG).show()
-            return
-        }
-        val fileName = "ssk_file_${todayDate()}.csv"
-        val file = File(getExternalFilesDir(null), fileName)
-        val ok = CsvExportUtils.exportSskSelectedMedicinesCsv(file, sskExportOrder, compiledList)
-        if (!ok) {
-            Toast.makeText(this, "Export Failed!", Toast.LENGTH_LONG).show()
-            return
-        }
-        val uri = FileProvider.getUriForFile(
-            this,
-            "${applicationContext.packageName}.fileprovider",
-            file
-        )
-        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "text/csv"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(shareIntent, "Share CSV via"))
-        Toast.makeText(this, "SSK file export ho gayi: $fileName", Toast.LENGTH_LONG).show()
-    }
 
     override fun onRequestPermissionsResult(
         requestCode: Int,
