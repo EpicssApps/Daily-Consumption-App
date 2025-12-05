@@ -19,62 +19,63 @@
             android:paddingBottom="8dp">
 
             <Button
-                android:id="@+id/btnDailyConsumptionCompile"
+                android:id="@+id/btnDailyConsumption"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
+                android:textAllCaps="false"
                 android:text="@string/daily_consumption" />
 
-            <Button
-                android:id="@+id/btnCompiledSummary"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:text="@string/dataactivity" />
-            <Button
-                android:id="@+id/btnSskFile"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:text="@string/ssk_file" />
-
-            <Button
-                android:id="@+id/btnfifteenDaysConsumption"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:text="@string/daily_consumption_for_15_days" />
 
             <Button
                 android:id="@+id/btnDownloadCsv"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
+                android:textAllCaps="false"
                 android:text="@string/download_sheet" />
-
-           <!-- <Button
-                android:id="@+id/btnMonthlyConsumption"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="3dp"
-                android:text="@string/monthly_consumption" />-->
 
             <Button
                 android:id="@+id/btnRollover"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="3dp"
+                android:textAllCaps="false"
                 android:text="@string/rollover_day" />
+
+            <!-- NEW: Replace previous 30 days with 2 half-month + monthly -->
+            <Button
+                android:id="@+id/btnReportFirstHalf"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:textAllCaps="false"
+                android:text="15 Days (1–15)" />
+
+            <Button
+                android:id="@+id/btnReportSecondHalf"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:textAllCaps="false"
+                android:text="15 Days (16–end)" />
+
+            <Button
+                android:id="@+id/btnReportMonthly"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="3dp"
+                android:textAllCaps="false"
+                android:text="@string/monthlyConsumptionReport" />
         </LinearLayout>
     </HorizontalScrollView>
-    <!-- activity_summary.xml me somewhere top par add karein -->
+
     <SearchView
         android:id="@+id/searchViewSummary"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:queryHint="Search Medicine..."
         android:iconifiedByDefault="false" />
-
 
     <TextView
         android:id="@+id/text_heading"
@@ -87,7 +88,6 @@
         android:textSize="20sp"
         android:textStyle="bold" />
 
-    <!-- Table Headers Row -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

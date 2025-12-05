@@ -24,7 +24,6 @@ class CompiledSummaryAdapter(
         return CompiledSummaryViewHolder(binding)
     }
 
-    // Display values exactly as stored in DB (no halving)
     fun formatValue(medicineName: String, value: Double): String {
         return value.toInt().toString()
     }
@@ -43,12 +42,8 @@ class CompiledSummaryAdapter(
             tvStoreIssued.text = formatValue(item.medicineName, item.totalStoreIssued)
             tvStockAvailable.text = item.stockAvailable
 
-            btnDelete.setOnClickListener {
-                onDeleteClicked(item)
-            }
-            holder.itemView.setOnClickListener {
-                onItemClick(item)
-            }
+            btnDelete.setOnClickListener { onDeleteClicked(item) }
+            holder.itemView.setOnClickListener { onItemClick(item) }
         }
     }
 

@@ -3,7 +3,6 @@ package com.epicx.apps.dailyconsumptionformapp
 import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -15,15 +14,14 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.epicx.apps.dailyconsumptionformapp.FormConstants.sskExportOrder
 import com.epicx.apps.dailyconsumptionformapp.databinding.ActivitySummaryBinding
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.PendingRequestCache
-import com.epicx.apps.dailyconsumptionformapp.objects.CsvExportUtils
 import com.epicx.apps.dailyconsumptionformapp.objects.SummaryEditDialog
 import com.epicx.apps.dailyconsumptionformapp.summaryActivityObjects.StockCsvExporter
 import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -31,20 +29,13 @@ class SummaryActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySummaryBinding
     private lateinit var db: AppDatabase
+    private lateinit var archiveDb: ReportArchiveDatabase
 
-    // Current selected vehicle (updated from intent or prefs)
     private var currentVehicle: String = ""
-
-    // Full list (for currentVehicle only)
     private var dataList: List<FormData> = emptyList()
     private val filteredList: MutableList<FormData> = mutableListOf()
     private lateinit var summaryAdapter: SummaryAdapter
 
-    companion object {
-        private const val REQUEST_WRITE_EXTERNAL_STORAGE = 1024
-    }
-
-    private var pendingExport: (() -> Unit)? = null
 
     @RequiresApi(Build.VERSION_CODES.Q)
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -53,18 +44,16 @@ class SummaryActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         db = AppDatabase(this)
+        archiveDb = ReportArchiveDatabase(this)
 
-        // 1) Resolve current vehicle (intent extra preferred, fallback prefs)
         val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         currentVehicle = intent.getStringExtra("vehicle")
             ?: prefs.getString("default_vehicle", "") ?: ""
 
-        // 2) Setup adapter (onlyShowBasicColumns depends on RS-01)
         summaryAdapter = SummaryAdapter(
             list = filteredList,
             onlyShowBasicColumns = currentVehicle.equals("RS-01", true)
         ) { item ->
-            // Edit dialog logic
             SummaryEditDialog.show(this, item) { updatedItem ->
                 fun toIntSafe(s: String?): Int = s?.toDoubleOrNull()?.toInt() ?: 0
 
@@ -120,29 +109,57 @@ class SummaryActivity : AppCompatActivity() {
         binding.recyclerSummary.layoutManager = LinearLayoutManager(this)
         binding.recyclerSummary.adapter = summaryAdapter
 
-        // 3) Apply initial vehicle-specific UI visibility
         applyVehicleUiMode()
 
-        // 4) Initial load of data for that vehicle
         reloadData()
         applySearchFilter(null)
 
-        // Search handling
         binding.searchViewSummary.setOnQueryTextListener(object : SearchView.OnQueryTextListener {
             override fun onQueryTextSubmit(query: String?): Boolean {
                 applySearchFilter(query); return true
             }
-
             override fun onQueryTextChange(newText: String?): Boolean {
                 applySearchFilter(newText); return true
             }
         })
 
-        // Download full sheet CSV (INTENTIONALLY NOT FILTERED – if you want filter, uncomment filter line)
+        // DAILY compile + queue DB accumulate + ARCHIVE snapshot + CSV
+        binding.btnDailyConsumption.setOnClickListener {
+            setupDailyConsumptionButton()
+        }
+
+        binding.btnReportFirstHalf.setOnClickListener {
+            val (y, m) = currentYearMonth()
+            val intent = Intent(this, CompiledSummaryActivity::class.java).apply {
+                putExtra("archive_mode", "first_half")
+                putExtra("year", y)
+                putExtra("month1", m) // 1-based month
+            }
+            startActivity(intent)
+        }
+
+        // NEW: Second half (16–end) of current month -> open CompiledSummaryActivity in half-month mode
+        binding.btnReportSecondHalf.setOnClickListener {
+            val (y, m) = currentYearMonth()
+            val intent = Intent(this, CompiledSummaryActivity::class.java).apply {
+                putExtra("archive_mode", "second_half")
+                putExtra("year", y)
+                putExtra("month1", m) // 1-based month
+            }
+            startActivity(intent)
+        }
+
+        // NEW: Full monthly report (current month)
+        binding.btnReportMonthly.setOnClickListener {
+            exportArchiveReportMonthlyPreviousMonth()
+        }
+
+        // Replace your btnDownloadCsv click handler with this version to ONLY share the CSV (no "Saved" toast, no local download message).
         binding.btnDownloadCsv.setOnClickListener {
             binding.progressBar.visibility = View.VISIBLE
             lifecycleScope.launch {
                 val apiResult = GoogleSheetApi.getAllCurrentStock()
+                binding.progressBar.visibility = View.GONE
                 if (!apiResult.isSuccess) {
                     Toast.makeText(
                         this@SummaryActivity,
@@ -151,13 +168,14 @@ class SummaryActivity : AppCompatActivity() {
                     ).show()
                     return@launch
                 }
+
                 val list = apiResult.getOrNull().orEmpty()
+                if (list.isEmpty()) {
+                    Toast.makeText(this@SummaryActivity, "Koi data nahi mila!", Toast.LENGTH_LONG).show()
+                    return@launch
+                }
 
-                // If you want only currentVehicle rows:
-                // val working = list.filter { it.vehicleName.equals(currentVehicle, true) }
-                val working = list
-
-                val rows = working.map { fd ->
+                val rows = list.map { fd ->
                     StockCsvExporter.StockRow(
                         fd.vehicleName,
                         fd.medicineName,
@@ -170,52 +188,15 @@ class SummaryActivity : AppCompatActivity() {
                     )
                 }
 
-                when (val export = StockCsvExporter.export(rows, this@SummaryActivity)) {
-                    is StockCsvExporter.ExportResult.Success -> {
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            "Saved: ${export.fileName}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                        binding.progressBar.visibility = View.GONE
-                        StockCsvExporter.share(this@SummaryActivity, export.uri)
-                    }
-                    is StockCsvExporter.ExportResult.Error -> {
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            export.message,
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
+                val csv = buildStockCsv(rows)
+                val fileName = "Current_Stock_${todayDate()}.csv"
+
+                // Share from cache (no saved toast, no persistent storage)
+                shareCsvFromCache(fileName, csv)
             }
         }
 
         binding.btnRollover.setOnClickListener { showRolloverConfirm() }
-
-        binding.btnDailyConsumptionCompile.setOnClickListener {
-            compileCurrentSheet()
-        }
-
-  /*      binding.btnMonthlyConsumption.setOnClickListener {
-            // Monthly consumption logically RS-01 only, but passing currentVehicle if RS-01 selected
-            MonthlyConsumptionHelper.showMonthPickerAndReport(
-                this@SummaryActivity,
-                binding.progressBar,
-                vehicleName = if (currentVehicle.isBlank()) "RS-01" else currentVehicle
-            )
-        }*/
-
-        binding.btnCompiledSummary.setOnClickListener {
-            startActivity(Intent(this, CompiledSummaryActivity::class.java))
-        }
-
-        binding.btnSskFile.setOnClickListener {
-            exportSskFile()
-        }
-        binding.btnfifteenDaysConsumption.setOnClickListener{
-            fifteenDaysCompileSheet()
-        }
     }
 
     override fun onResume() {
@@ -223,15 +204,12 @@ class SummaryActivity : AppCompatActivity() {
         val prefs = getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
         val latest = prefs.getString("default_vehicle", "") ?: ""
         if (!latest.equals(currentVehicle, true)) {
-            // Vehicle changed while we were away
             currentVehicle = latest
             applyVehicleUiMode()
-            // Adapter columns may need re-init if RS-01 status flipped
             summaryAdapter = SummaryAdapter(
                 list = filteredList,
                 onlyShowBasicColumns = currentVehicle.equals("RS-01", true)
             ) { item ->
-                // Reuse same click logic to avoid duplication
                 SummaryEditDialog.show(this, item) { updatedItem ->
                     fun toIntSafe(s: String?): Int = s?.toDoubleOrNull()?.toInt() ?: 0
                     val oldConsumption = toIntSafe(item.consumption)
@@ -283,7 +261,6 @@ class SummaryActivity : AppCompatActivity() {
             reloadData()
             applySearchFilter(binding.searchViewSummary.query?.toString())
         } else {
-            // Same vehicle – just refresh data in case changed
             reloadData()
             applySearchFilter(binding.searchViewSummary.query?.toString())
         }
@@ -291,39 +268,36 @@ class SummaryActivity : AppCompatActivity() {
 
     private fun applyVehicleUiMode() {
         val labelStoreIssued = findViewById<TextView>(R.id.label_summary_store_issued)
-        val btnCompile = binding.btnDailyConsumptionCompile
-        val btnFifteenDaysCompile = binding.btnfifteenDaysConsumption
-        val btnCompiledSummary = binding.btnCompiledSummary
-        val btnSskFile = binding.btnSskFile
-//        val btnMonthlyConsumption = binding.btnMonthlyConsumption
+        val btnSskFile = binding.btnDailyConsumption
         val btnRollover = binding.btnRollover
         val btnDownload = binding.btnDownloadCsv
-        val labelEmergency = findViewById<TextView>(R.id.label_summary_emergency)
 
+        // NEW buttons
+        val btnFirstHalf = binding.btnReportFirstHalf
+        val btnSecondHalf = binding.btnReportSecondHalf
+        val btnMonthly = binding.btnReportMonthly
+
+        val labelEmergency = findViewById<TextView>(R.id.label_summary_emergency)
         val isRs01 = currentVehicle.equals("RS-01", true)
 
-        // RS-01 special: emergency hidden, store issued visible
         if (isRs01) {
             labelEmergency?.visibility = View.GONE
             labelStoreIssued?.visibility = View.VISIBLE
-            btnCompile.visibility = View.VISIBLE
-            btnFifteenDaysCompile.visibility = View.VISIBLE
-            btnCompiledSummary.visibility = View.VISIBLE
             btnSskFile.visibility = View.VISIBLE
-//            btnMonthlyConsumption.visibility = View.VISIBLE
             btnRollover.visibility = View.VISIBLE
             btnDownload.visibility = View.VISIBLE
+            btnFirstHalf.visibility = View.VISIBLE
+            btnSecondHalf.visibility = View.VISIBLE
+            btnMonthly.visibility = View.VISIBLE
         } else {
             labelEmergency?.visibility = View.VISIBLE
             labelStoreIssued?.visibility = View.GONE
-            // Non RS-01: hide special buttons
-            btnCompile.visibility = View.GONE
-            btnFifteenDaysCompile.visibility = View.GONE
-            btnCompiledSummary.visibility = View.GONE
             btnSskFile.visibility = View.GONE
-//            btnMonthlyConsumption.visibility = View.GONE
             btnRollover.visibility = View.GONE
             btnDownload.visibility = View.GONE
+            btnFirstHalf.visibility = View.GONE
+            btnSecondHalf.visibility = View.GONE
+            btnMonthly.visibility = View.GONE
         }
     }
 
@@ -331,7 +305,6 @@ class SummaryActivity : AppCompatActivity() {
         dataList = if (currentVehicle.isBlank()) {
             db.getAllMedicines()
         } else {
-            // Prefer direct vehicle query if added (see AppDatabase helper below)
             db.getMedicinesForVehicle(currentVehicle)
         }
     }
@@ -409,353 +382,301 @@ class SummaryActivity : AppCompatActivity() {
         }
     }
 
-    private fun compileCurrentSheet() {
-        binding.progressBar.visibility = View.VISIBLE
-        lifecycleScope.launch {
-            val result = GoogleSheetApi.getAllCurrentStock()
-            binding.progressBar.visibility = View.GONE
-            if (!result.isSuccess) {
-                Toast.makeText(
-                    this@SummaryActivity,
-                    "Failed to fetch data: ${result.exceptionOrNull()?.message}",
-                    Toast.LENGTH_LONG
+    private fun exportArchiveReportMonthlyPreviousMonth() {
+        try {
+            // Compute previous calendar month
+            val cal = java.util.Calendar.getInstance()
+            val currentYear = cal.get(java.util.Calendar.YEAR)
+            val currentMonth1 = cal.get(java.util.Calendar.MONTH) + 1 // 1..12
+
+            val (targetYear, targetMonth1) = if (currentMonth1 == 1) {
+                (currentYear - 1) to 12
+            } else {
+                currentYear to (currentMonth1 - 1)
+            }
+
+            // Read monthly totals from monthly_archive
+            val monthly = archiveDb.getMonthlyAggregated(targetYear, targetMonth1)
+            if (monthly.isEmpty()) {
+                android.widget.Toast.makeText(
+                    this,
+                    "Monthly archive me data nahi mila (${monthName(targetMonth1)}-${targetYear}).",
+                    android.widget.Toast.LENGTH_LONG
                 ).show()
-                return@launch
-            }
-            val list = result.getOrNull() ?: emptyList()
-            if (list.isEmpty()) {
-                Toast.makeText(this@SummaryActivity, "Koi data nahi mila!", Toast.LENGTH_LONG).show()
-                return@launch
+                return
             }
 
-            // (Optional) Filter to currentVehicle if you want per-vehicle compile
-            // val source = if (currentVehicle.isBlank()) list else list.filter { it.vehicleName.equals(currentVehicle, true) }
-            val source = list
-
+            // Mapping same as your monthlyConsumptionReport
             val medicineNameMapping = mapOf(
                 "Polymyxin B Sulphate Skin (20 gm)" to "Polymyxin B Sulphate Skin Ointment with lignocaine (20 gm)",
-                "Neomycin Sulphate 0.5%" to "Neomycin Sulphate 0.5%, bacitracin zinc"
+                "Neomycin Sulphate 0.5%" to "Neomycin Sulphate",
+                "Sterilized Gauze Pieces 10 cm x 10 cm 1 box" to "Sterilized Gauze Pieces 10 cm x 10 cm 1 box having 10 packs of 10 pieces",
+                "Cotton Bandages BPC 6.5 cm X 6 meter (2.5 inch)" to "Cotton Bandages BPC 6.5 cm X 6 meter",
+                "Cotton Bandages BPC 10 cm X 6 meter (4 inch)" to "Cotton Bandages BPC 10 cm X 6 meter"
             )
-            fun parseInt(s: String?): Int = s?.toDoubleOrNull()?.toInt() ?: 0
 
-            val grouped = source.groupBy {
-                medicineNameMapping[it.medicineName.trim()] ?: it.medicineName.trim()
+            val order = FormConstants.rs01MonthlyConsumptionList
+            val allowedSet = order.toSet()
+
+            fun normalizeToExportName(raw: String): String? {
+                val name = raw.trim()
+                val mapped = medicineNameMapping[name] ?: name
+                return if (allowedSet.contains(mapped)) mapped else null
             }
 
-            val compiledList = grouped.map { (medName, rows) ->
-                val totalOpening = rows.sumOf { parseInt(it.openingBalance) }
-                val totalConsumption = rows.sumOf { parseInt(it.consumption) }
-                val totalEmergency = rows.sumOf { parseInt(it.totalEmergency) }
-                val totalStoreIssued = rows.sumOf { parseInt(it.storeIssued) }
-                val totalClosing = totalOpening - totalConsumption
-                val stockAvailable = rows
-                    .filter { it.vehicleName.equals("RS-01", ignoreCase = true) }
-                    .map { parseInt(it.stockAvailable) }
-                    .firstOrNull() ?: 0
+            // Build normalized map
+            val exportMap = monthly.mapNotNull { row ->
+                val normalized = normalizeToExportName(row.medicineName ?: "")
+                if (normalized != null) normalized to row else null
+            }.toMap()
 
-                AppDatabase.CompiledMedicineData(
-                    medicineName = medName,
-                    totalConsumption = totalConsumption,
-                    totalEmergency = totalEmergency,
-                    totalOpening = totalOpening,
-                    totalClosing = totalClosing,
-                    totalStoreIssued = totalStoreIssued,
-                    stockAvailable = stockAvailable
-                )
+            // Filename: RS-01 {MonthName}-{Year}.csv
+            val fileName = "RS-01 ${monthName(targetMonth1)}-${targetYear}.csv"
+            val file = java.io.File(getExternalFilesDir(null), fileName)
+
+            fun csvEscape(value: String): String {
+                return if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+                    "\"" + value.replace("\"", "\"\"") + "\""
+                } else value
             }
 
-            val pseudoDate = "CURRENT"
-            db.insertCompiledSummary(pseudoDate, compiledList)
-
-            AlertDialog.Builder(this@SummaryActivity)
-                .setTitle("Compiled Summary (All Current Rows)")
-                .setMessage(buildString {
-                    append("Medicine, Opening, Consumption, Emergency, Closing, Store Issued, Stock Available\n")
-                    compiledList.forEach {
-                        append("${it.medicineName}, ${it.totalOpening}, ${it.totalConsumption}, ${it.totalEmergency}, ${it.totalClosing}, ${it.totalStoreIssued}, ${it.stockAvailable}\n")
-                    }
-                })
-                .setPositiveButton("Export as CSV") { _, _ ->
-                    try {
-                        val fileName = "RS-01_Daily_Consumption_${todayDate()}.csv"
-                        val file = File(getExternalFilesDir(null), fileName)
-                        file.printWriter().use { out ->
-                            out.println("MedicineName,TotalOpening,TotalConsumption,TotalEmergency,TotalClosing,TotalStoreIssued,StockAvailable")
-                            for (item in compiledList) {
-                                out.println("${item.medicineName},${item.totalOpening},${item.totalConsumption},${item.totalEmergency},${item.totalClosing},${item.totalStoreIssued},${item.stockAvailable}")
-                            }
-                        }
-                        val uri = FileProvider.getUriForFile(
-                            this@SummaryActivity,
-                            "${applicationContext.packageName}.fileprovider",
-                            file
-                        )
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        startActivity(Intent.createChooser(shareIntent, "CSV file share karen..."))
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            "CSV export ho gaya: $fileName",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            "Export failed: ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
+            // Write CSV in your order. "StockAvailable" column uses totalClosing (as per your original behavior).
+            file.printWriter().use { out ->
+                out.println("MedicineName,TotalConsumption,TotalEmergency,StockAvailable")
+                for (name in order) {
+                    val row = exportMap[name]
+                    if (row != null) {
+                        out.println("${csvEscape(name)},${row.totalConsumption},${row.totalEmergency},${row.totalClosing}")
+                    } else {
+                        out.println("${csvEscape(name)},,,")
                     }
                 }
-                .setNegativeButton("Close", null)
-                .show()
+            }
+
+            // Share CSV
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.fileprovider",
+                file
+            )
+            val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                type = "text/csv"
+                putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            startActivity(android.content.Intent.createChooser(shareIntent, "CSV file share karen..."))
+            android.widget.Toast.makeText(this, "CSV export ho gaya: $fileName", android.widget.Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            android.widget.Toast.makeText(this, "Monthly export failed: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
         }
     }
 
-    private fun fifteenDaysCompileSheet() {
-        binding.progressBar.visibility = View.VISIBLE
-        lifecycleScope.launch {
-            val result = GoogleSheetApi.getAllCurrentStock()
-            binding.progressBar.visibility = View.GONE
-            if (!result.isSuccess) {
-                Toast.makeText(
-                    this@SummaryActivity,
-                    "Failed to fetch data: ${result.exceptionOrNull()?.message}",
-                    Toast.LENGTH_LONG
-                ).show()
-                return@launch
-            }
-            val list = result.getOrNull() ?: emptyList()
-            if (list.isEmpty()) {
-                Toast.makeText(this@SummaryActivity, "Koi data nahi mila!", Toast.LENGTH_LONG).show()
-                return@launch
-            }
-
-            // (Optional) Filter to currentVehicle if you want per-vehicle compile
-            // val source = if (currentVehicle.isBlank()) list else list.filter { it.vehicleName.equals(currentVehicle, true) }
-            val source = list
-
-            // Ye mapping sirf DB compile ke liye pehle jaise rakha hai (unchanged)
-            val medicineNameMapping = mapOf(
-                "Polymyxin B Sulphate Skin (20 gm)" to "Polymyxin B Sulphate Skin Ointment with lignocaine (20 gm)",
-                "Neomycin Sulphate 0.5%" to "Neomycin Sulphate 0.5%, bacitracin zinc"
-            )
-            fun parseInt(s: String?): Int = s?.toDoubleOrNull()?.toInt() ?: 0
-
-            // ===== Original compiledList (DB ke liye) — unchanged behavior + Examination Gloves adjustments =====
-            val grouped = source.groupBy {
-                medicineNameMapping[it.medicineName.trim()] ?: it.medicineName.trim()
-            }
-
-            val compiledList = grouped.map { (medName, rows) ->
-                val totalOpening = rows.sumOf { parseInt(it.openingBalance) }
-                val totalConsumptionRaw = rows.sumOf { parseInt(it.consumption) }
-                val totalEmergency = rows.sumOf { parseInt(it.totalEmergency) }
-                val totalStoreIssued = rows.sumOf { parseInt(it.storeIssued) }
-                val totalClosingRaw = rows.sumOf { parseInt(it.closingBalance) }
-                val stockAvailable = rows
-                    .filter { it.vehicleName.equals("RS-01", ignoreCase = true) }
-                    .map { parseInt(it.stockAvailable) }
-                    .firstOrNull() ?: 0
-
-                // Only for "Examination Gloves": halve consumption and closing
-                val isExamGloves = medName.equals("Examination Gloves", ignoreCase = true)
-                val totalConsumption = if (isExamGloves) totalConsumptionRaw / 2 else totalConsumptionRaw
-                val totalClosing = if (isExamGloves) totalClosingRaw / 2 else totalClosingRaw
-
-                AppDatabase.CompiledMedicineData(
-                    medicineName = medName,
-                    totalConsumption = totalConsumption,
-                    totalEmergency = totalEmergency,
-                    totalOpening = totalOpening,
-                    totalClosing = totalClosing,
-                    totalStoreIssued = totalStoreIssued,
-                    stockAvailable = stockAvailable
-                )
-            }
-
-            val pseudoDate = "CURRENT"
-            db.insertCompiledSummary(pseudoDate, compiledList)
-
-            AlertDialog.Builder(this@SummaryActivity)
-                .setTitle("Compiled Summary (All Current Rows)")
-                .setMessage(buildString {
-                    append("Medicine, Consumption, Emergency, Stock Available\n")
-                    compiledList.forEach {
-                        append("${it.medicineName}, ${it.totalConsumption}, ${it.totalEmergency}, ${it.stockAvailable}\n")
-                    }
-                })
-                .setPositiveButton("Export as CSV") { _, _ ->
-                    try {
-                        val fileName = "Fifteen_Daily_Consumption_${todayDate()}.csv"
-                        val file = File(getExternalFilesDir(null), fileName)
-
-                        // Helpers
-                        fun csvEscape(value: String): String {
-                            return if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
-                                "\"" + value.replace("\"", "\"\"") + "\""
-                            } else value
-                        }
-
-                        val order = FormConstants.medicalSuppliesOrder
-                        val allowedSet = order.toSet()
-
-                        // Export-only normalization: sirf medical_supplies_list ke exact names per map/aggregate
-                        fun normalizeToExportName(raw: String): String? {
-                            val name = raw.trim()
-
-                            // Regex helpers
-                            val airwayRegex = Regex("(?i)^Airway\\s*[0-5]$")
-                            val lmaRegex = Regex("(?i)^Laryngeal Mask Airway \\(LMA\\)\\s*0[1-5]$")
-
-                            return when {
-                                airwayRegex.matches(name) ->
-                                    "Airway (0-5)"
-
-                                lmaRegex.matches(name) ->
-                                    "Laryngeal Mask Airway (LMA) (01-05)"
-
-                                name.startsWith("Nebulizer Mask with tubing", true) ->
-                                    "Nebulizer Mask with tubing (Small, Large)"
-
-                                // If exact name is already in allowed list, keep it
-                                allowedSet.contains(name) -> name
-
-                                else -> null // Not part of Stock Position list => exclude from export
-                            }
-                        }
-
-                        // Export aggregation: rows ko normalize karke sirf allowed names per group karo
-                        // Saath hi mark karo ke raw row "Examination Gloves" thi ya nahi (taake half apply ho)
-                        val exportNormalized = source.mapNotNull { r ->
-                            val rawName = r.medicineName ?: ""
-                            val target = normalizeToExportName(rawName)
-                            if (target != null) Triple(target, r, rawName.equals("Examination Gloves", ignoreCase = true)) else null
-                        }
-
-                        // Type inference ko kaam karne dein (koi Any/dynamic nahi)
-                        val exportGrouped = exportNormalized.groupBy { it.first }
-
-                        val exportCompiled = exportGrouped.map { (medName, triples) ->
-                            // Sum with per-row adjustment only for Examination Gloves rows
-                            val totalConsumption = triples.sumOf { (_, row, isExam) ->
-                                val cons = parseInt(row.consumption)
-                                if (isExam) cons / 2 else cons
-                            }
-                            val totalEmergency = triples.sumOf { (_, row, _) ->
-                                parseInt(row.totalEmergency)
-                            }
-                            val totalClosing = triples.sumOf { (_, row, isExam) ->
-                                val closing = parseInt(row.closingBalance)
-                                if (isExam) closing / 2 else closing
-                            }
-
-                            AppDatabase.CompiledMedicineData(
-                                medicineName = medName,
-                                totalConsumption = totalConsumption,
-                                totalEmergency = totalEmergency,
-                                totalOpening = 0,          // export me istemal nahi ho raha
-                                totalClosing = totalClosing,
-                                totalStoreIssued = 0,      // export me istemal nahi ho raha
-                                stockAvailable = 0         // export me istemal nahi ho raha
-                            )
-                        }
-
-                        val exportMap = exportCompiled.associateBy { it.medicineName.trim() }
-
-                        // CSV: sirf order ke items, missing -> blank. Extras bilkul NAHI.
-                        file.printWriter().use { out ->
-                            out.println("MedicineName,TotalConsumption,TotalEmergency,StockAvailable")
-                            for (name in order) {
-                                val row = exportMap[name]
-                                if (row != null) {
-                                    // Note: last column me aap pehle se totalClosing print kar rahe the, wahi rakha hai
-                                    out.println("${csvEscape(name)},${row.totalConsumption},${row.totalEmergency},${row.totalClosing}")
-                                } else {
-                                    out.println("${csvEscape(name)},,,")
-                                }
-                            }
-                        }
-
-                        val uri = FileProvider.getUriForFile(
-                            this@SummaryActivity,
-                            "${applicationContext.packageName}.fileprovider",
-                            file
-                        )
-                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/csv"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        }
-                        startActivity(Intent.createChooser(shareIntent, "CSV file share karen..."))
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            "CSV export ho gaya: $fileName",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    } catch (e: Exception) {
-                        Toast.makeText(
-                            this@SummaryActivity,
-                            "Export failed: ${e.message}",
-                            Toast.LENGTH_LONG
-                        ).show()
-                    }
-                }
-                .setNegativeButton("Close", null)
-                .show()
-        }
+    private fun monthName(month1: Int): String = when (month1) {
+        1 -> "January"
+        2 -> "February"
+        3 -> "March"
+        4 -> "April"
+        5 -> "May"
+        6 -> "June"
+        7 -> "July"
+        8 -> "August"
+        9 -> "September"
+        10 -> "October"
+        11 -> "November"
+        12 -> "December"
+        else -> ""
     }
 
-    fun todayDate(): String =
-        SimpleDateFormat("dd-MM-yyyy", Locale.US).format(Date())
+    // Utility to build CSV contents from current stock list
+    private fun buildStockCsv(rows: List<StockCsvExporter.StockRow>): String {
+        val sb = StringBuilder()
+        sb.appendLine("Vehicle,Medicine,Opening,Consumption,Emergency,Closing,StoreIssued,StockAvailable")
+        rows.forEach { r ->
+            fun esc(s: String?): String {
+                val v = s ?: ""
+                return if (v.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+                    "\"" + v.replace("\"", "\"\"") + "\""
+                } else v
+            }
+            sb.appendLine(
+                listOf(
+                    esc(r.vehicleName),
+                    esc(r.medicineName),
+                    esc(r.openingBalance),
+                    esc(r.consumption),
+                    esc(r.totalEmergency),
+                    esc(r.closingBalance),
+                    esc(r.storeIssued),
+                    esc(r.stockAvailable)
+                ).joinToString(",")
+            )
+        }
+        return sb.toString()
+    }
 
-    private fun exportSskFile() {
-        val compiledList = db.getAllCompiledSummary()
-        val latestDate = compiledList.firstOrNull()?.date
-        if (latestDate == null) {
-            Toast.makeText(this, "Koi compiled summary nahi mili!", Toast.LENGTH_LONG).show()
-            return
-        }
-        val fileName = "ssk_file_${todayDate()}.csv"
-        val file = File(getExternalFilesDir(null), fileName)
-        val ok = CsvExportUtils.exportSskSelectedMedicinesCsv(file, sskExportOrder, compiledList)
-        if (!ok) {
-            Toast.makeText(this, "Export Failed!", Toast.LENGTH_LONG).show()
-            return
-        }
+    // Create a temp CSV in app cache dir and share it (no persistent download)
+    private fun shareCsvFromCache(fileName: String, csvContent: String) {
+        // Write to internal cache (gets cleaned by system; not shown in File Manager downloads)
+        val cacheFile = File(cacheDir, fileName)
+        cacheFile.writeText(csvContent)
+
         val uri = FileProvider.getUriForFile(
             this,
             "${applicationContext.packageName}.fileprovider",
-            file
+            cacheFile
         )
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
             type = "text/csv"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
-        startActivity(Intent.createChooser(shareIntent, "Share CSV via"))
-        Toast.makeText(this, "SSK file export ho gayi: $fileName", Toast.LENGTH_LONG).show()
+        startActivity(Intent.createChooser(shareIntent, "CSV file share karen..."))
+
+        // Optional: schedule deletion after share (best-effort)
+        // cacheFile.delete() // Uncomment if you want to delete immediately after launching the share sheet
     }
 
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == REQUEST_WRITE_EXTERNAL_STORAGE) {
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                pendingExport?.invoke()
-            } else {
-                Toast.makeText(
-                    this,
-                    "Storage permission required to export file.",
-                    Toast.LENGTH_LONG
-                ).show()
+    private fun currentYearMonth(): Pair<Int, Int> {
+        val cal = Calendar.getInstance()
+        val y = cal.get(Calendar.YEAR)
+        val m = cal.get(Calendar.MONTH) + 1 // 1-based
+        return y to m
+    }
+
+    fun todayDate(): String =
+        SimpleDateFormat("dd-MM-yyyy", Locale.US).format(Date())
+
+    private fun todayIsoDate(): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
+
+    // Use the SAME date for DB saves as the report date (previous calendar day).
+// This replaces only the date parts inside setupDailyConsumptionButton().
+
+    private fun setupDailyConsumptionButton() {
+        binding.btnDailyConsumption.setOnClickListener {
+            binding.progressBar.visibility = View.VISIBLE
+            lifecycleScope.launch {
+                try {
+                    // 1) Fetch latest stock from Google Sheets
+                    val apiResult = GoogleSheetApi.getAllCurrentStock()
+                    if (!apiResult.isSuccess) {
+                        binding.progressBar.visibility = View.GONE
+                        Toast.makeText(
+                            this@SummaryActivity,
+                            "Failed to fetch data: ${apiResult.exceptionOrNull()?.message}",
+                            Toast.LENGTH_LONG
+                        ).show()
+                        return@launch
+                    }
+                    val list = apiResult.getOrNull().orEmpty()
+                    if (list.isEmpty()) {
+                        binding.progressBar.visibility = View.GONE
+                        Toast.makeText(this@SummaryActivity, "Koi data nahi mila!", Toast.LENGTH_LONG).show()
+                        return@launch
+                    }
+
+                    // 2) Compile (group + sums)
+                    val medicineNameMapping = mapOf(
+                        "Polymyxin B Sulphate Skin (20 gm)" to "Polymyxin B Sulphate Skin Ointment with lignocaine (20 gm)",
+                        "Neomycin Sulphate 0.5%" to "Neomycin Sulphate 0.5%, bacitracin zinc"
+                    )
+                    fun parseInt(s: String?): Int = s?.toDoubleOrNull()?.toInt() ?: 0
+
+                    val grouped = list.groupBy { r ->
+                        medicineNameMapping[r.medicineName.trim()] ?: r.medicineName.trim()
+                    }
+
+                    val compiledList = grouped.map { (medName, rows) ->
+                        val totalOpening = rows.sumOf { parseInt(it.openingBalance) }
+                        val totalConsumption = rows.sumOf { parseInt(it.consumption) }
+                        val totalEmergency = rows.sumOf { parseInt(it.totalEmergency) }
+                        val totalStoreIssued = rows.sumOf { parseInt(it.storeIssued) }
+                        val totalClosing = totalOpening - totalConsumption
+                        val stockAvailable = rows
+                            .filter { it.vehicleName.equals("RS-01", ignoreCase = true) }
+                            .map { parseInt(it.stockAvailable) }
+                            .firstOrNull() ?: 0
+
+                        AppDatabase.CompiledMedicineData(
+                            medicineName = medName,
+                            totalConsumption = totalConsumption,
+                            totalEmergency = totalEmergency,
+                            totalOpening = totalOpening,
+                            totalClosing = totalClosing,
+                            totalStoreIssued = totalStoreIssued,
+                            stockAvailable = stockAvailable
+                        )
+                    }
+
+                    // Use previous-day dates for BOTH DB and file (report date = previous day)
+                    val prevHuman = previousHumanDate()   // dd-MM-yyyy (for compiled_summary + upload_flags + filename)
+                    val prevISO = previousIsoDate()       // yyyy-MM-dd (for archive_compiled + monthly_archive)
+
+                    // 3) DAILY GUARD: Only save once per report date (previous day)
+                    val alreadySaved = db.hasDailyCompileAdded(prevHuman)
+                    if (!alreadySaved) {
+                        db.insertOrAccumulateCompiledSummary(prevHuman, compiledList)   // compiled_summary.date = prevHuman
+                        archiveDb.insertOrAccumulateSnapshot(prevISO, compiledList)     // archive_compiled.date = prevISO
+                        archiveDb.insertOrAccumulateMonthlyTotals(prevISO, compiledList)// monthly_archive(year,month) from prevISO
+                        db.markDailyCompileAdded(prevHuman)                              // upload_flags.date = prevHuman
+                    } else {
+                        Toast.makeText(
+                            this@SummaryActivity,
+                            "Is report date ka compiled data pehle se saved hai. Ab sirf export hoga.",
+                            Toast.LENGTH_LONG
+                        ).show()
+                    }
+
+                    // 4) Export CSV with previous date in file name
+                    val fileName = "RS-01_Daily_Consumption_${prevHuman}.csv"
+                    val file = java.io.File(getExternalFilesDir(null), fileName)
+                    file.printWriter().use { out ->
+                        out.println("MedicineName,TotalOpening,TotalConsumption,TotalClosing")
+                        for (item in compiledList) {
+                            out.println("${item.medicineName},${item.totalOpening},${item.totalConsumption},${item.totalClosing}")
+                        }
+                    }
+
+                    val uri = androidx.core.content.FileProvider.getUriForFile(
+                        this@SummaryActivity,
+                        "${applicationContext.packageName}.fileprovider",
+                        file
+                    )
+                    val shareIntent = android.content.Intent(android.content.Intent.ACTION_SEND).apply {
+                        type = "text/csv"
+                        putExtra(android.content.Intent.EXTRA_STREAM, uri)
+                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    }
+                    startActivity(android.content.Intent.createChooser(shareIntent, "CSV file share karen..."))
+
+                    Toast.makeText(
+                        this@SummaryActivity,
+                        "CSV export ho gaya: $fileName",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } catch (e: Exception) {
+                    Toast.makeText(
+                        this@SummaryActivity,
+                        "Daily compile/export error: ${e.message}",
+                        Toast.LENGTH_LONG
+                    ).show()
+                } finally {
+                    binding.progressBar.visibility = View.GONE
+                }
             }
-            pendingExport = null
         }
+    }
+
+    // Helpers for previous-day dates
+    private fun previousHumanDate(): String {
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+        return java.text.SimpleDateFormat("dd-MM-yyyy", java.util.Locale.US).format(cal.time)
+    }
+
+    private fun previousIsoDate(): String {
+        val cal = java.util.Calendar.getInstance()
+        cal.add(java.util.Calendar.DAY_OF_YEAR, -1)
+        return java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(cal.time)
     }
 }

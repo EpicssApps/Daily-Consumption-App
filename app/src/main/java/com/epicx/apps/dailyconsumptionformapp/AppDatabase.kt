@@ -5,8 +5,13 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.io.File
 import androidx.core.database.sqlite.transaction
+import android.database.Cursor
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Date
+import java.util.Locale
 
-class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", null, 4) { // bump to 4
+class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", null, 5) { // bump to 5
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL("""
@@ -44,8 +49,8 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // Purani DB ko wipe karke nayi banani hai
-        if (oldVersion < 4) {
+        // Wipe for schema bump to 5 (safe reset if coming from <5). If you prefer migration, adjust accordingly.
+        if (oldVersion < 5) {
             db.execSQL("DROP TABLE IF EXISTS medicines")
             db.execSQL("DROP TABLE IF EXISTS upload_flags")
             db.execSQL("DROP TABLE IF EXISTS compiled_summary")
@@ -71,6 +76,9 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
                     stockAvailable INTEGER
                 );
             """)
+        }
+        if (oldVersion < 4) {
+            // no-op here because we already drop/recreate above for <5
         }
     }
 
@@ -101,12 +109,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         }
     }
 
-    // OPTIONAL: Agar galti se multiple vehicles aa gaye hon to baqi sab delete karne ka helper
-    fun keepOnlyVehicleData(selectedVehicle: String) {
-        val db = writableDatabase
-        db.execSQL("DELETE FROM medicines WHERE vehicleName <> ?", arrayOf(selectedVehicle))
-    }
-
     // CRUD for medicines
     fun addOrUpdateMedicine(vehicle: String, medicine: String, opening: String, consumption: String, emergency: String, closing: String) {
         val db = writableDatabase
@@ -127,7 +129,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         db.execSQL("UPDATE medicines SET storeIssued=? WHERE vehicleName=? AND medicineName=?",
             arrayOf(issued, vehicle, medicine))
     }
-// Add anywhere inside AppDatabase class (e.g. near other CRUD helpers)
 
     // Revert (delete) pending unsent consumption + emergency for a single medicine
     fun revertPendingForMedicine(vehicle: String, medicine: String) {
@@ -141,7 +142,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
             val cons = cursor.getString(1)?.toIntOrNull() ?: 0
             val emerg = cursor.getString(2)?.toIntOrNull() ?: 0
             val closing = cursor.getString(3)?.toIntOrNull() ?: 0
-            // Revert idea: originalClosingBeforeSubmit = closing + cons + emerg
             val restoredClosing = (closing + cons + emerg).coerceAtLeast(0)
             db.execSQL(
                 "UPDATE medicines SET consumption='0', totalEmergency='0', closingBalance=? WHERE vehicleName=? AND medicineName=?",
@@ -164,8 +164,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
             arrayOf(vehicle, medicine)
         )
         if (cursor.moveToFirst()) {
-            val opening = cursor.getString(0)?.toIntOrNull() ?: 0
-            // Strategy: Reconstruct base stock before pending changes:
             val oldCons = cursor.getString(1)?.toIntOrNull() ?: 0
             val oldEmerg = cursor.getString(2)?.toIntOrNull() ?: 0
             val currentClosing = cursor.getString(3)?.toIntOrNull() ?: 0
@@ -184,6 +182,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         }
         cursor.close()
     }
+
     fun getAllMedicines(): List<FormData> {
         val db = readableDatabase
         val cursor = db.rawQuery("SELECT vehicleName, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued FROM medicines", null)
@@ -202,7 +201,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         cursor.close()
         return list
     }
-    // Add this helper inside AppDatabase class (anywhere near other CRUD helpers)
+
     fun getMedicinesForVehicle(vehicle: String): List<FormData> {
         val db = readableDatabase
         val cursor = db.rawQuery(
@@ -226,6 +225,7 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         cursor.close()
         return list
     }
+
     fun getMedicineOpening(vehicle: String, medicine: String): String {
         val db = readableDatabase
         val cursor = db.rawQuery(
@@ -269,24 +269,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         return item
     }
 
-    fun checkUploadFlag(date: String): Boolean {
-        val db = readableDatabase
-        val cursor = db.rawQuery("SELECT uploaded FROM upload_flags WHERE date=?", arrayOf(date))
-        val uploaded = cursor.moveToFirst() && cursor.getInt(0) == 1
-        cursor.close()
-        return uploaded
-    }
-
-    fun resetConsumptionAndEmergency() {
-        val db = writableDatabase
-        db.execSQL("UPDATE medicines SET consumption = '0', totalEmergency = '0'")
-    }
-
-    fun setUploadFlag(date: String) {
-        val db = writableDatabase
-        db.execSQL("INSERT OR REPLACE INTO upload_flags(date, uploaded) VALUES (?, 1)", arrayOf(date))
-    }
-
     fun exportToCSV(file: File): Boolean {
         return try {
             val medicines = getAllMedicines()
@@ -294,29 +276,6 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
                 out.println("vehicleName,medicineName,openingBalance,consumption,totalEmergency,closingBalance,storeIssued")
                 for (item in medicines) {
                     out.println("${item.vehicleName},${item.medicineName},${item.openingBalance},${item.consumption},${item.totalEmergency},${item.closingBalance},${item.storeIssued}")
-                }
-            }
-            true
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    fun importFromCSV(file: File): Boolean {
-        return try {
-            val lines = file.readLines()
-            if (lines.isEmpty()) return false
-            val db = writableDatabase
-            db.execSQL("DELETE FROM medicines")
-            for (i in 1 until lines.size) {
-                val parts = lines[i].split(",")
-                if (parts.size >= 6) {
-                    val storeIssued = if (parts.size >= 7) parts[6] else "0"
-                    val args = arrayOf(parts[0], parts[1], parts[2], parts[3], parts[4], parts[5], storeIssued)
-                    db.execSQL(
-                        "INSERT INTO medicines(vehicleName, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        args
-                    )
                 }
             }
             true
@@ -342,11 +301,35 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         val db = writableDatabase
         db.execSQL("DELETE FROM compiled_summary")
     }
+
     fun deleteMedicineByName(vehicleName: String, medicineName: String) {
         val db = writableDatabase
         db.execSQL("DELETE FROM medicines WHERE vehicleName=? AND medicineName=?", arrayOf(vehicleName, medicineName))
     }
-    fun insertCompiledSummary(
+
+    fun hasDailyCompileAdded(date: String): Boolean {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT uploaded FROM upload_flags WHERE date=? LIMIT 1",
+            arrayOf(date)
+        )
+        val existsAndUploaded = cursor.moveToFirst() && (cursor.getInt(0) == 1)
+        cursor.close()
+        return existsAndUploaded
+    }
+
+    // Mark today's compiled data as saved (so it won't be added again)
+    fun markDailyCompileAdded(date: String) {
+        val db = writableDatabase
+        db.execSQL(
+            "INSERT OR REPLACE INTO upload_flags(date, uploaded) VALUES (?, ?)",
+            arrayOf(date, 1)
+        )
+    }
+
+// - consumption and totalEmergency -> ADD
+// - totalOpening, totalClosing, totalStoreIssued, stockAvailable -> OVERWRITE (latest)
+    fun insertOrAccumulateCompiledSummary(
         date: String,
         items: List<CompiledMedicineData>
     ) {
@@ -354,24 +337,84 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
         db.beginTransaction()
         try {
             for (item in items) {
-                db.execSQL(
-                    "INSERT INTO compiled_summary(date, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued, stockAvailable) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    arrayOf(
-                        date,
-                        item.medicineName,
-                        item.totalOpening,
-                        item.totalConsumption,
-                        item.totalEmergency,
-                        item.totalClosing,
-                        item.totalStoreIssued,
-                        item.stockAvailable
-                    )
+                // Date ko ignore: sirf medicineName par check
+                val cursor: Cursor = db.rawQuery(
+                    "SELECT id, openingBalance, consumption, totalEmergency, closingBalance, storeIssued, stockAvailable FROM compiled_summary WHERE medicineName=? LIMIT 1",
+                    arrayOf(item.medicineName)
                 )
+                if (cursor.moveToFirst()) {
+                    val id = cursor.getInt(0)
+                    val existingOpening = cursor.getInt(1)
+                    val existingConsumption = cursor.getInt(2)
+                    val existingEmergency = cursor.getInt(3)
+                    val existingClosing = cursor.getInt(4)
+                    val existingStoreIssued = cursor.getInt(5)
+                    val existingStockAvailable = cursor.getInt(6)
+
+                    // Accumulate only these
+                    val newConsumption = existingConsumption + item.totalConsumption
+                    val newEmergency = existingEmergency + item.totalEmergency
+
+                    // Overwrite others with latest values
+                    val newOpening = item.totalOpening
+                    val newClosing = item.totalClosing
+                    val newStoreIssued = item.totalStoreIssued
+                    val newStockAvailable = item.stockAvailable
+
+                    // Date ko bhi latest se overwrite kar do (optional)
+                    db.execSQL(
+                        "UPDATE compiled_summary SET date=?, openingBalance=?, consumption=?, totalEmergency=?, closingBalance=?, storeIssued=?, stockAvailable=? WHERE id=?",
+                        arrayOf(date, newOpening, newConsumption, newEmergency, newClosing, newStoreIssued, newStockAvailable, id)
+                    )
+                } else {
+                    // First time insert for this medicine
+                    db.execSQL(
+                        "INSERT INTO compiled_summary(date, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued, stockAvailable) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        arrayOf(
+                            date,
+                            item.medicineName,
+                            item.totalOpening,
+                            item.totalConsumption,
+                            item.totalEmergency,
+                            item.totalClosing,
+                            item.totalStoreIssued,
+                            item.stockAvailable
+                        )
+                    )
+                }
+                cursor.close()
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    // Get rows for a specific date
+    fun getCompiledSummaryByDate(date: String): List<CompiledMedicineDataWithId> {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT id, date, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued, stockAvailable FROM compiled_summary WHERE date=? ORDER BY medicineName ASC",
+            arrayOf(date)
+        )
+        val list = mutableListOf<CompiledMedicineDataWithId>()
+        while (cursor.moveToNext()) {
+            list.add(
+                CompiledMedicineDataWithId(
+                    id = cursor.getInt(0),
+                    date = cursor.getString(1),
+                    medicineName = cursor.getString(2),
+                    totalOpening = cursor.getDouble(3),
+                    totalConsumption = cursor.getDouble(4),
+                    totalEmergency = cursor.getDouble(5),
+                    totalClosing = cursor.getDouble(6),
+                    totalStoreIssued = cursor.getDouble(7),
+                    stockAvailable = cursor.getInt(8).toString()
+                )
+            )
+        }
+        cursor.close()
+        return list
     }
 
     fun getAllCompiledSummary(): List<CompiledMedicineDataWithId> {
@@ -402,5 +445,52 @@ class AppDatabase(context: Context) : SQLiteOpenHelper(context, "medicinedb", nu
     fun deleteCompiledSummaryById(id: Int) {
         val db = writableDatabase
         db.execSQL("DELETE FROM compiled_summary WHERE id=?", arrayOf(id))
+    }
+
+    // Helpers: date format
+    private fun fmtDate(d: Date): String = SimpleDateFormat("dd-MM-yyyy", Locale.US).format(d)
+
+    // Get aggregated totals for last N days (including today), grouped by medicineName
+    fun getCompiledSummaryForLastNDays(days: Int): List<CompiledMedicineData> {
+        val endCal = Calendar.getInstance() // today
+        val endDateStr = fmtDate(endCal.time)
+
+        val startCal = Calendar.getInstance()
+        startCal.add(Calendar.DAY_OF_YEAR, -(days - 1))
+        val startDateStr = fmtDate(startCal.time)
+
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT medicineName, SUM(openingBalance), SUM(consumption), SUM(totalEmergency), SUM(closingBalance), SUM(storeIssued), MAX(stockAvailable) " +
+                    "FROM compiled_summary " +
+                    "WHERE date BETWEEN ? AND ? " +
+                    "GROUP BY medicineName " +
+                    "ORDER BY medicineName ASC",
+            arrayOf(startDateStr, endDateStr)
+        )
+        val list = mutableListOf<CompiledMedicineData>()
+        while (cursor.moveToNext()) {
+            list.add(
+                CompiledMedicineData(
+                    medicineName = cursor.getString(0),
+                    totalOpening = cursor.getInt(1),
+                    totalConsumption = cursor.getInt(2),
+                    totalEmergency = cursor.getInt(3),
+                    totalClosing = cursor.getInt(4),
+                    totalStoreIssued = cursor.getInt(5),
+                    stockAvailable = cursor.getInt(6)
+                )
+            )
+        }
+        cursor.close()
+        return list
+    }
+
+    fun getCompiledSummaryForLast15Days(): List<CompiledMedicineData> {
+        return getCompiledSummaryForLastNDays(15)
+    }
+
+    fun getCompiledSummaryForLast30Days(): List<CompiledMedicineData> {
+        return getCompiledSummaryForLastNDays(30)
     }
 }
