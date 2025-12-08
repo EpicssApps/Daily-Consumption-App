@@ -189,7 +189,7 @@ class SummaryActivity : AppCompatActivity() {
                 }
 
                 val csv = buildStockCsv(rows)
-                val fileName = "Current_Stock_${todayDate()}.csv"
+                val fileName = "Current_Stock_${previousIsoDate()}.csv"
 
                 // Share from cache (no saved toast, no persistent storage)
                 shareCsvFromCache(fileName, csv)
@@ -442,11 +442,11 @@ class SummaryActivity : AppCompatActivity() {
 
             // Write CSV in your order. "StockAvailable" column uses totalClosing (as per your original behavior).
             file.printWriter().use { out ->
-                out.println("MedicineName,TotalConsumption,TotalEmergency,StockAvailable")
+                out.println("MedicineName,TotalConsumption,TotalEmergency,Stock Available In Main Store,StockAvailable")
                 for (name in order) {
                     val row = exportMap[name]
                     if (row != null) {
-                        out.println("${csvEscape(name)},${row.totalConsumption},${row.totalEmergency},${row.totalClosing}")
+                        out.println("${csvEscape(name)},${row.totalConsumption},${row.totalEmergency},,${row.totalClosing}")
                     } else {
                         out.println("${csvEscape(name)},,,")
                     }
@@ -627,13 +627,19 @@ class SummaryActivity : AppCompatActivity() {
                         ).show()
                     }
 
+                    fun csvEscape(value: String): String {
+                        return if (value.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) {
+                            "\"" + value.replace("\"", "\"\"") + "\""
+                        } else value
+                    }
+
                     // 4) Export CSV with previous date in file name
                     val fileName = "RS-01_Daily_Consumption_${prevHuman}.csv"
                     val file = java.io.File(getExternalFilesDir(null), fileName)
                     file.printWriter().use { out ->
                         out.println("MedicineName,TotalOpening,TotalConsumption,TotalClosing")
                         for (item in compiledList) {
-                            out.println("${item.medicineName},${item.totalOpening},${item.totalConsumption},${item.totalClosing}")
+                            out.println("${csvEscape(item.medicineName)},${item.totalOpening},${item.totalConsumption},${item.totalClosing}")
                         }
                     }
 
