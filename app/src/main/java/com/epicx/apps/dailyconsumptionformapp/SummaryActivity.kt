@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.FileProvider
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.epicx.apps.dailyconsumptionformapp.FormConstants.sskExportOrder
 import com.epicx.apps.dailyconsumptionformapp.databinding.ActivitySummaryBinding
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.PendingRequestCache
 import com.epicx.apps.dailyconsumptionformapp.objects.SummaryEditDialog
@@ -549,9 +550,6 @@ class SummaryActivity : AppCompatActivity() {
     private fun todayIsoDate(): String =
         SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
 
-    // Use the SAME date for DB saves as the report date (previous calendar day).
-// This replaces only the date parts inside setupDailyConsumptionButton().
-
     private fun setupDailyConsumptionButton() {
         binding.btnDailyConsumption.setOnClickListener {
             binding.progressBar.visibility = View.VISIBLE
@@ -636,10 +634,20 @@ class SummaryActivity : AppCompatActivity() {
                     // 4) Export CSV with previous date in file name
                     val fileName = "RS-01_Daily_Consumption_${prevHuman}.csv"
                     val file = java.io.File(getExternalFilesDir(null), fileName)
+
+                    // Strictly output only sskExportOrder (39 items), fill zeros if missing
+                    val byName = compiledList.associateBy { it.medicineName }
+
                     file.printWriter().use { out ->
                         out.println("MedicineName,TotalOpening,TotalConsumption,TotalClosing")
-                        for (item in compiledList) {
-                            out.println("${csvEscape(item.medicineName)},${item.totalOpening},${item.totalConsumption},${item.totalClosing}")
+                        sskExportOrder.forEach { name ->
+                            val item = byName[name]
+                            if (item != null) {
+                                out.println("${csvEscape(item.medicineName)},${item.totalOpening},${item.totalConsumption},${item.totalClosing}")
+                            } else {
+                                // include missing names with zeros to always output 39 rows
+                                out.println("${csvEscape(name)},0,0,0")
+                            }
                         }
                     }
 
@@ -672,6 +680,8 @@ class SummaryActivity : AppCompatActivity() {
             }
         }
     }
+
+
 
     // Helpers for previous-day dates
     private fun previousHumanDate(): String {
