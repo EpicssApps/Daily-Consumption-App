@@ -202,34 +202,62 @@ class ReportArchiveDatabase(context: Context) :
     }
 
     // NEW: Monthly archive upsert per day compile (immutable vs half deletions)
+    // --------- PATCHED FUNCTION STARTS HERE ---------
     fun insertOrAccumulateMonthlyTotals(dateISO: String, items: List<AppDatabase.CompiledMedicineData>) {
-        val (year, month1) = parseYearMonth(dateISO)
+        val (dateYear, dateMonth) = parseYearMonth(dateISO)
         val db = writableDatabase
         db.beginTransaction()
         try {
             for (item in items) {
                 val cursor = db.rawQuery(
-                    "SELECT id, openingBalance, consumption, totalEmergency, closingBalance, storeIssued, stockAvailable, lastUpdatedDate " +
+                    "SELECT id, openingBalance, consumption, totalEmergency, closingBalance, storeIssued, stockAvailable, lastUpdatedDate, year, month " +
                             "FROM monthly_archive WHERE year=? AND month=? AND medicineName=? LIMIT 1",
-                    arrayOf(year.toString(), month1.toString(), item.medicineName)
+                    arrayOf(dateYear.toString(), dateMonth.toString(), item.medicineName)
                 )
                 if (cursor.moveToFirst()) {
                     val id = cursor.getInt(0)
+                    val existingOpening = cursor.getInt(1)
                     val existingConsumption = cursor.getInt(2)
                     val existingEmergency = cursor.getInt(3)
+                    val existingClosing = cursor.getInt(4)
+                    val existingStoreIssued = cursor.getInt(5)
+                    val existingStockAvailable = cursor.getInt(6)
+                    val rowLastUpdated = cursor.getString(7) ?: dateISO
+                    val rowYear = cursor.getInt(8)
+                    val rowMonth = cursor.getInt(9)
+
+                    // Only overwrite 'latest' fields if month/year of dateISO matches row month/year.
+                    val shouldOverwriteLatest = (dateYear == rowYear) && (dateMonth == rowMonth)
+
+                    val openingToUpdate     = if (shouldOverwriteLatest) item.totalOpening else existingOpening
+                    val closingToUpdate     = if (shouldOverwriteLatest) item.totalClosing else existingClosing
+                    val storeIssuedToUpdate = if (shouldOverwriteLatest) item.totalStoreIssued else existingStoreIssued
+                    val stockAvailableToUpdate = if (shouldOverwriteLatest) item.stockAvailable else existingStockAvailable
+                    val lastUpdatedDateToUpdate = if (shouldOverwriteLatest) dateISO else rowLastUpdated
+
                     val newConsumption = existingConsumption + item.totalConsumption
-                    val newEmergency = existingEmergency + item.totalEmergency
-                    // Overwrite latest fields
+                    val newEmergency   = existingEmergency + item.totalEmergency
+
                     db.execSQL(
                         "UPDATE monthly_archive SET openingBalance=?, consumption=?, totalEmergency=?, closingBalance=?, storeIssued=?, stockAvailable=?, lastUpdatedDate=? WHERE id=?",
-                        arrayOf(item.totalOpening, newConsumption, newEmergency, item.totalClosing, item.totalStoreIssued, item.stockAvailable, dateISO, id)
+                        arrayOf(
+                            openingToUpdate,     // openingBalance
+                            newConsumption,      // consumption (accumulate always)
+                            newEmergency,        // totalEmergency (accumulate always)
+                            closingToUpdate,     // closingBalance
+                            storeIssuedToUpdate, // storeIssued
+                            stockAvailableToUpdate, // stockAvailable
+                            lastUpdatedDateToUpdate,
+                            id
+                        )
                     )
                 } else {
+                    // Row does NOT exist yet: safe to insert new
                     db.execSQL(
                         "INSERT INTO monthly_archive(year, month, medicineName, openingBalance, consumption, totalEmergency, closingBalance, storeIssued, stockAvailable, lastUpdatedDate) " +
                                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         arrayOf(
-                            year, month1, item.medicineName,
+                            dateYear, dateMonth, item.medicineName,
                             item.totalOpening, item.totalConsumption, item.totalEmergency,
                             item.totalClosing, item.totalStoreIssued, item.stockAvailable,
                             dateISO
@@ -243,6 +271,7 @@ class ReportArchiveDatabase(context: Context) :
             db.endTransaction()
         }
     }
+    // --------- PATCHED FUNCTION ENDS HERE ---------
 
     // Get monthly aggregated rows from monthly_archive (safe even if halves were deleted)
     fun getMonthlyAggregated(year: Int, month1: Int): List<AppDatabase.CompiledMedicineData> {
