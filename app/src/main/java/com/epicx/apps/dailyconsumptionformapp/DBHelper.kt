@@ -14,8 +14,8 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                     "vehicle TEXT NOT NULL," +
                     "medicine TEXT NOT NULL," +
                     "qty INTEGER NOT NULL," +
-                    "created_at INTEGER NOT NULL," +
-                    "uploaded INTEGER NOT NULL DEFAULT 0" +
+                    "uploaded INTEGER NOT NULL DEFAULT 0," +
+                    "forced INTEGER NOT NULL DEFAULT 0" +
                     ")"
         )
         db.execSQL("CREATE INDEX idx_issue_vehicle_uploaded ON issue_items(vehicle, uploaded)")
@@ -25,6 +25,14 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
             "CREATE TABLE rs01_monthly (" +
                     "medicine TEXT PRIMARY KEY," +
                     "qty INTEGER NOT NULL" +
+                    ")"
+        )
+
+        // Indent number per vehicle table
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS issue_indent (" +
+                    "vehicle TEXT PRIMARY KEY," +
+                    "indent TEXT NOT NULL" +
                     ")"
         )
     }
@@ -38,11 +46,24 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                         ")"
             )
         }
-        // Future migrations >2 yahan
+        // Indent table migration for older versions
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS issue_indent (" +
+                    "vehicle TEXT PRIMARY KEY," +
+                    "indent TEXT NOT NULL" +
+                    ")"
+        )
+        if (oldVersion < 3) {
+            // Add forced column to track force-adjusted items (stock was insufficient)
+            try {
+                db.execSQL("ALTER TABLE issue_items ADD COLUMN forced INTEGER NOT NULL DEFAULT 0")
+            } catch (_: Exception) { /* column may already exist */ }
+        }
+        // Future migrations >3 yahan
     }
 
     // ---------------- Issue Items (existing) ----------------
-    fun insertIssue(vehicle: String?, medicine: String?, qty: Int): Long {
+    fun insertIssue(vehicle: String?, medicine: String?, qty: Int, forced: Boolean = false): Long {
         val db = writableDatabase
         val cv = ContentValues()
         cv.put("vehicle", vehicle)
@@ -50,13 +71,14 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
         cv.put("qty", qty)
         cv.put("created_at", System.currentTimeMillis())
         cv.put("uploaded", 0)
+        cv.put("forced", if (forced) 1 else 0)
         return db.insert("issue_items", null, cv)
     }
 
     fun getUnuploadedByVehicle(vehicle: String?): MutableList<IssueItem?> {
         val db = readableDatabase
         val c = db.rawQuery(
-            "SELECT id, vehicle, medicine, qty, created_at, uploaded FROM issue_items WHERE vehicle=? AND uploaded=0",
+            "SELECT id, vehicle, medicine, qty, created_at, uploaded, forced FROM issue_items WHERE vehicle=? AND uploaded=0",
             arrayOf(vehicle)
         )
         val out: MutableList<IssueItem?> = ArrayList()
@@ -69,6 +91,7 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                 it.qty = c.getInt(3)
                 it.createdAt = c.getLong(4)
                 it.uploaded = c.getInt(5) == 1
+                it.forced = c.getInt(6) == 1
                 out.add(it)
             }
         } finally {
@@ -105,52 +128,33 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
         )
     }
 
-    // ---------------- RS-01 Monthly Cumulative (NEW) ----------------
+    // ----------- Indent Number Methods (NEW) -----------
 
     /**
-     * Add qty to cumulative monthly total for given medicine.
-     * If row not exists -> insert; else update += qty.
+     * Save or update indent number per vehicle. Replaces old value if exists.
      */
-    fun addOrIncrementRs01Monthly(medicine: String, qty: Int) {
-        if (qty <= 0) return
+    fun saveIndent(vehicle: String, indent: String) {
         val db = writableDatabase
-        // Try update first
-        val updated = db.compileStatement(
-            "UPDATE rs01_monthly SET qty = qty + ? WHERE medicine = ?"
-        ).apply {
-            bindLong(1, qty.toLong())
-            bindString(2, medicine)
-        }.executeUpdateDelete()
-
-        if (updated == 0) {
-            val cv = ContentValues()
-            cv.put("medicine", medicine)
-            cv.put("qty", qty)
-            db.insert("rs01_monthly", null, cv)
-        }
+        val cv = ContentValues()
+        cv.put("vehicle", vehicle)
+        cv.put("indent", indent)
+        db.insertWithOnConflict("issue_indent", null, cv, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     /**
-     * Return all cumulative rows (medicine, qty)
+     * Get last indent number for this vehicle. Returns null if not set.
      */
-    fun getAllRs01Monthly(): List<Pair<String, Int>> {
+    fun getIndent(vehicle: String): String? {
         val db = readableDatabase
-        val list = mutableListOf<Pair<String, Int>>()
-        val c = db.rawQuery("SELECT medicine, qty FROM rs01_monthly", null)
-        c.use {
-            while (it.moveToNext()) {
-                list.add(it.getString(0) to it.getInt(1))
-            }
-        }
-        return list
-    }
-
-    fun clearRs01Monthly() {
-        writableDatabase.execSQL("DELETE FROM rs01_monthly")
+        val c =
+            db.rawQuery("SELECT indent FROM issue_indent WHERE vehicle=? LIMIT 1", arrayOf(vehicle))
+        val result = if (c.moveToFirst()) c.getString(0) else null
+        c.close()
+        return result
     }
 
     companion object {
         const val DB_NAME = "issuedb.db"
-        const val DB_VER = 2   // bumped to 2
+        const val DB_VER = 3   // bumped to 3 (added forced column)
     }
 }

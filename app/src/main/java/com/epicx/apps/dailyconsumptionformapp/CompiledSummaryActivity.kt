@@ -65,16 +65,9 @@ class CompiledSummaryActivity : AppCompatActivity() {
         adapter = CompiledSummaryAdapter(
             summaryList,
             onDeleteClicked = { item ->
-                // Half-month archive delete (range permanent)
-                showConfirmDelete(
-                    title = "Permanently delete?",
-                    message = "Warning: ${item.medicineName} ke half-month archive rows PERMANENTLY delete ho jayenge.\nIsay undo nahi kar sakte.\nProceed?",
-                    onConfirm = {
-                        archiveDb.deleteHalfRangeForMedicine(yearArg, monthArg, isFirstHalf, item.medicineName)
-                        adapter.removeItem(item)
-                        Toast.makeText(this, "Archive item permanently deleted.", Toast.LENGTH_LONG).show()
-                    }
-                )
+                // Sirf UI se delete karein, database se nahi
+                adapter.removeItem(item)
+                Toast.makeText(this, "Item deleted from view. Data archive me safe hai.", Toast.LENGTH_LONG).show()
             },
             onItemClick = { item ->
                 val intent = Intent(this, WebViewActivity::class.java)
@@ -94,15 +87,9 @@ class CompiledSummaryActivity : AppCompatActivity() {
         binding.recyclerCompiled.adapter = adapter
 
         binding.btnDeleteAll.setOnClickListener {
-            showConfirmDelete(
-                title = "Permanently delete ALL (Half)?",
-                message = "Warning: Is half-month archive range ke SARE items PERMANENTLY delete ho jayenge.\nIsay undo nahi kar sakte.\nProceed?",
-                onConfirm = {
-                    archiveDb.deleteHalfRangeAll(yearArg, monthArg, isFirstHalf)
-                    adapter.clearAll()
-                    Toast.makeText(this, "Archive half-month range permanently deleted.", Toast.LENGTH_LONG).show()
-                }
-            )
+            // Sirf UI se clear karein, database se nahi
+            adapter.clearAll()
+            Toast.makeText(this, "All items deleted from view. Data archive me safe hai.", Toast.LENGTH_LONG).show()
         }
     }
 

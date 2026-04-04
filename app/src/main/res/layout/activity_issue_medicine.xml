@@ -65,6 +65,15 @@
             android:hint="e.g., 10"
             android:inputType="number" />
 
+        <TextView
+            android:id="@+id/tvLastIndent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Last indent: "
+            android:textColor="#888888"
+            android:textStyle="bold|italic"
+            android:textSize="18sp" />
+
         <Button
             android:id="@+id/btnSave"
             android:layout_width="match_parent"
@@ -102,6 +111,20 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="Delete or Edit Pending items" />
+
+        <!-- activity_issue_medicine.xml me somewhere above btnUpload -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Indent Number (Required)"
+            android:textStyle="bold"
+            android:layout_marginTop="16dp"/>
+        <EditText
+            android:id="@+id/etIndent"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:hint="e.g., 12345678"
+            android:inputType="number"/>
 
         <Button
             android:id="@+id/btnUpload"

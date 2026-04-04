@@ -141,7 +141,19 @@ class SummaryActivity : AppCompatActivity() {
 
         // NEW: Second half (16–end) of current month -> open CompiledSummaryActivity in half-month mode
         binding.btnReportSecondHalf.setOnClickListener {
-            val (y, m) = currentYearMonth()
+            val cal = java.util.Calendar.getInstance()
+            val today = cal.get(java.util.Calendar.DAY_OF_MONTH)
+            var y = cal.get(java.util.Calendar.YEAR)
+            var m = cal.get(java.util.Calendar.MONTH) + 1 // 1-based
+            // Agar aaj ki date 1–15 hai, to previous month/year use karo
+            if (today <= 15) {
+                if (m == 1) {
+                    y -= 1
+                    m = 12
+                } else {
+                    m -= 1
+                }
+            }
             val intent = Intent(this, CompiledSummaryActivity::class.java).apply {
                 putExtra("archive_mode", "second_half")
                 putExtra("year", y)
@@ -386,9 +398,9 @@ class SummaryActivity : AppCompatActivity() {
     private fun exportArchiveReportMonthlyPreviousMonth() {
         try {
             // Compute previous calendar month
-            val cal = java.util.Calendar.getInstance()
-            val currentYear = cal.get(java.util.Calendar.YEAR)
-            val currentMonth1 = cal.get(java.util.Calendar.MONTH) + 1 // 1..12
+            val cal = Calendar.getInstance()
+            val currentYear = cal.get(Calendar.YEAR)
+            val currentMonth1 = cal.get(Calendar.MONTH) + 1 // 1..12
 
             val (targetYear, targetMonth1) = if (currentMonth1 == 1) {
                 (currentYear - 1) to 12
@@ -396,15 +408,11 @@ class SummaryActivity : AppCompatActivity() {
                 currentYear to (currentMonth1 - 1)
             }
 
-            // Read monthly totals from monthly_archive
-            val monthly = archiveDb.getMonthlyAggregated(targetYear, targetMonth1)
+            // Aggregate poore month ka data (1–end) from archive_compiled
+            var monthly = archiveDb.getAggregatedForMonth(targetYear, targetMonth1)
+            // Fallback: agar monthly_archive empty ho, to archive_compiled se aggregate karo
             if (monthly.isEmpty()) {
-                android.widget.Toast.makeText(
-                    this,
-                    "Monthly archive me data nahi mila (${monthName(targetMonth1)}-${targetYear}).",
-                    android.widget.Toast.LENGTH_LONG
-                ).show()
-                return
+                monthly = archiveDb.getAggregatedForMonth(targetYear, targetMonth1)
             }
 
             // Mapping same as your monthlyConsumptionReport
@@ -607,7 +615,7 @@ class SummaryActivity : AppCompatActivity() {
                     }
 
                     // Use previous-day dates for BOTH DB and file (report date = previous day)
-                    val prevHuman = previousHumanDate()   // dd-MM-yyyy (for compiled_summary + upload_flags + filename)
+                    val prevHuman = previousHumanDate()   // dd-MM-yyyy (for compiled_summary + upload_flags + +filename)
                     val prevISO = previousIsoDate()       // yyyy-MM-dd (for archive_compiled + monthly_archive)
 
                     // 3) DAILY GUARD: Only save once per report date (previous day)

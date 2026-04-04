@@ -20,6 +20,8 @@ class IssueMedicineActivity : AppCompatActivity() {
     private lateinit var spVehicle: Spinner
     private lateinit var tvVehicleStatic: TextView
     private lateinit var etMedicine: EditText
+    private lateinit var tvLastIndent: TextView
+    private lateinit var etIndent: EditText
     private lateinit var etQty: EditText
     private lateinit var btnSave: Button
     private lateinit var btnUpload: Button
@@ -52,6 +54,8 @@ class IssueMedicineActivity : AppCompatActivity() {
     }
 
     private fun bindViews() {
+        tvLastIndent = findViewById(R.id.tvLastIndent)
+        etIndent = findViewById(R.id.etIndent)
         spVehicle = findViewById(R.id.spVehicle)
         tvVehicleStatic = findViewById(R.id.tvVehicleStatic)
         etMedicine = findViewById(R.id.edit_medicine)
@@ -97,6 +101,10 @@ class IssueMedicineActivity : AppCompatActivity() {
                     selectedVehicle = vehicleList[position]
                     updateUploadButtonText()
                     refreshPendingList()
+                    val lastIndent = issueDb.getIndent(selectedVehicle)
+                    // Only show in info, not as default input!
+                    tvLastIndent.text = if (lastIndent.isNullOrBlank()) "" else "Last indent: $lastIndent"
+                    etIndent.setText("")
                 }
                 override fun onNothingSelected(parent: AdapterView<*>?) {}
             }
@@ -113,6 +121,9 @@ class IssueMedicineActivity : AppCompatActivity() {
             tvVehicleStatic.text = selectedVehicle.ifBlank { "Vehicle N/A" }
             updateUploadButtonText()
             btnSubmitRs01Consumption.visibility = View.GONE
+            val lastIndent = issueDb.getIndent(selectedVehicle)
+            tvLastIndent.text = if (lastIndent.isNullOrBlank()) "" else "Last indent: $lastIndent"
+            etIndent.setText("")
         }
     }
 
@@ -283,24 +294,52 @@ class IssueMedicineActivity : AppCompatActivity() {
             val rsMed = mainDb.getMedicineRecord("RS-01", medicine)
             val currentClosing = rsMed?.closingBalance?.toIntOrNull() ?: 0
             if (qty > currentClosing) {
-                toast("RS-01 stock kam hai (Available: $currentClosing)")
+                val dialogMsg = "RS-01 stock kam hai Available: $currentClosing.\nAgar ap iss ko phr bhi add karna chahte hain to YES kar k add kar skte hain."
+                androidx.appcompat.app.AlertDialog.Builder(this)
+                    .setTitle("Stock Alert")
+                    .setMessage(dialogMsg)
+                    .setPositiveButton("YES") { dialog, _ ->
+                        dialog.dismiss()
+                        // Continue with the add/submit logic, force adjustment
+                        proceedWithIssue(vehicle, medicine, qty, isOutwardIssueFromRs01, isSelfRs01Entry, forceAdjust = true)
+                    }
+                    .setNegativeButton("NO") { dialog, _ ->
+                        dialog.dismiss()
+                    }
+                    .show()
                 return
             }
         }
 
-        // Insert issue row (self RS-01 entry bhi record ho jayegi agar aap history rakhna chahte hain)
-        issueDb.insertIssue(vehicle, medicine, qty)
+        proceedWithIssue(vehicle, medicine, qty, isOutwardIssueFromRs01, isSelfRs01Entry, forceAdjust = false)
+    }
 
+    private fun proceedWithIssue(vehicle: String, medicine: String, qty: Int, isOutwardIssueFromRs01: Boolean, isSelfRs01Entry: Boolean, forceAdjust: Boolean) {
         if (isOutwardIssueFromRs01) {
-            // Outward: pending adjust (consumption++, closing--)
-            if (!adjustRs01Pending(medicine, qty)) {
-                toast("Adjustment failed (stock issue)")
-                return
+            if (forceAdjust) {
+                // Force adjust (stock was 0/insufficient):
+                // Do NOT touch mainDb at all (no closing decrease, no consumption increase)
+                // so it does NOT show in btnSubmitRs01Consumption pending list,
+                // and RS-01 stock is not affected locally or online.
+                // Just insert into issueDb with forced=true flag.
+                issueDb.insertIssue(vehicle, medicine, qty, forced = true)
+            } else {
+                // Normal outward: adjust consumption and closing in mainDb
+                if (!adjustRs01Pending(medicine, qty, false)) {
+                    toast("Adjustment failed (stock issue)")
+                    return
+                }
+                // Insert into issueDb (normal, forced=false)
+                issueDb.insertIssue(vehicle, medicine, qty, forced = false)
             }
         } else if (isSelfRs01Entry) {
             // Self RS-01: sirf stock add (consumption touch nahi -> submit list me nahi aayega)
             addRs01Stock(medicine, qty)
-            // NOTE: Agar aap yahan add ke bajaye adjust (plus/minus) chahte hain to input filter me minus allow karein
+            // Insert into issueDb so it shows in tvPendingList
+            issueDb.insertIssue(vehicle, medicine, qty)
+        } else {
+            // For other vehicles, always insert
+            issueDb.insertIssue(vehicle, medicine, qty)
         }
 
         val msg = when {
@@ -316,7 +355,7 @@ class IssueMedicineActivity : AppCompatActivity() {
     /* -------------------------------------------
        Outward adjust (consumption add, closing minus)
      ------------------------------------------- */
-    private fun adjustRs01Pending(medicine: String, deltaQty: Int): Boolean {
+    private fun adjustRs01Pending(medicine: String, deltaQty: Int, forceAdjust: Boolean = false): Boolean {
         val rec = mainDb.getMedicineRecord("RS-01", medicine)
         if (rec == null) {
             mainDb.addOrUpdateMedicine(
@@ -334,7 +373,7 @@ class IssueMedicineActivity : AppCompatActivity() {
         val oldEmerg = r2.totalEmergency.toIntOrNull() ?: 0
         val oldClosing = r2.closingBalance.toIntOrNull() ?: 0
 
-        if (deltaQty > 0 && deltaQty > oldClosing) return false
+        if (!forceAdjust && deltaQty > 0 && deltaQty > oldClosing) return false
 
         val newCons = (oldCons + deltaQty).coerceAtLeast(0)
         val newClosing = (oldClosing - deltaQty).coerceAtLeast(0)
@@ -386,6 +425,14 @@ class IssueMedicineActivity : AppCompatActivity() {
     private fun uploadIssuesFlow() {
         val vehicle = currentVehicle()
         if (vehicle.isEmpty()) { toast("Vehicle not set"); return }
+
+        val indent = etIndent.text?.toString()?.trim() ?: ""
+        if (indent.isEmpty()) {
+            etIndent.error = "Indent number required"
+            etIndent.requestFocus()
+            toast("Indent number required")
+            return
+        }
 
         val unuploaded = issueDb.getUnuploadedByVehicle(vehicle).filterNotNull()
         if (unuploaded.isEmpty()) { toast("No pending items for $vehicle"); return }
@@ -446,6 +493,9 @@ class IssueMedicineActivity : AppCompatActivity() {
                     }
                     PendingRequestCache.clearIf(signature)
 
+                    // ***** Yahin pe indent save karen! *****
+                    issueDb.saveIndent(selectedVehicle, indent)
+
                     val ids: MutableList<Long?> = unuploaded.map { it.id as Long? }.toMutableList()
                     issueDb.markUploaded(ids)
 
@@ -495,7 +545,8 @@ class IssueMedicineActivity : AppCompatActivity() {
             if (id <= 0) return@setOnItemClickListener
             val oldQty = row.qty
             showEditDialog(id, row.medicine ?: "", oldQty) {
-                if (isRs01User) {
+                if (isRs01User && !row.forced) {
+                    // Only adjust mainDb if this was NOT a force-adjusted item
                     val updatedRow = issueDb.getUnuploadedByVehicle(vehicle)
                         .filterNotNull()
                         .find { it.id == id }
@@ -530,7 +581,8 @@ class IssueMedicineActivity : AppCompatActivity() {
                 .setPositiveButton("Delete") { d2, _ ->
                     d2.dismiss()
                     issueDb.deleteIssue(id)
-                    if (isRs01User) {
+                    if (isRs01User && !row.forced) {
+                        // Only revert mainDb if this was NOT a force-adjusted item
                         val isSelf = vehicle.equals("RS-01", true)
                         if (isSelf) {
                             // Deleting a self-added stock: reduce closing by that qty
@@ -553,10 +605,22 @@ class IssueMedicineActivity : AppCompatActivity() {
         dlg.show()
     }
 
-    // Reduce or add only closing (used for self RS-01 edits/deletes)
+    // Reduce or add only closing (used for self RS-01 edits/deletes and force-adjust outward issues)
     private fun adjustRs01ClosingOnly(medicine: String, delta: Int) {
         if (delta == 0) return
-        val rec = mainDb.getMedicineRecord("RS-01", medicine) ?: return
+        val rec = mainDb.getMedicineRecord("RS-01", medicine)
+        if (rec == null) {
+            // Record doesn't exist yet — create with closing = max(0, delta)
+            mainDb.addOrUpdateMedicine(
+                vehicle = "RS-01",
+                medicine = medicine,
+                opening = "0",
+                consumption = "0",
+                emergency = "0",
+                closing = delta.coerceAtLeast(0).toString()
+            )
+            return
+        }
         val opening = rec.openingBalance
         val cons = rec.consumption
         val emerg = rec.totalEmergency

@@ -7,4 +7,5 @@ class IssueItem {
     var qty: Int = 0
     var createdAt: Long = 0
     var uploaded: Boolean = false
+    var forced: Boolean = false
 }
