@@ -35,6 +35,18 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                     "indent TEXT NOT NULL" +
                     ")"
         )
+
+        // Forced issues monthly tracking (accumulates forced qty per month/medicine)
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS forced_issues_monthly (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "year INTEGER NOT NULL," +
+                    "month INTEGER NOT NULL," +
+                    "medicine TEXT NOT NULL," +
+                    "qty INTEGER NOT NULL DEFAULT 0," +
+                    "UNIQUE(year, month, medicine)" +
+                    ")"
+        )
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -59,7 +71,20 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                 db.execSQL("ALTER TABLE issue_items ADD COLUMN forced INTEGER NOT NULL DEFAULT 0")
             } catch (_: Exception) { /* column may already exist */ }
         }
-        // Future migrations >3 yahan
+        if (oldVersion < 4) {
+            // Forced issues monthly tracking table
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS forced_issues_monthly (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                        "year INTEGER NOT NULL," +
+                        "month INTEGER NOT NULL," +
+                        "medicine TEXT NOT NULL," +
+                        "qty INTEGER NOT NULL DEFAULT 0," +
+                        "UNIQUE(year, month, medicine)" +
+                        ")"
+            )
+        }
+        // Future migrations >4 yahan
     }
 
     // ---------------- Issue Items (existing) ----------------
@@ -155,6 +180,53 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
 
     companion object {
         const val DB_NAME = "issuedb.db"
-        const val DB_VER = 3   // bumped to 3 (added forced column)
+        const val DB_VER = 4   // bumped to 4 (added forced_issues_monthly table)
+    }
+
+    // ----------- Forced Issues Monthly Tracking -----------
+
+    /**
+     * Accumulate forced issue qty for a medicine in a given year/month.
+     * Called after successful upload of forced items.
+     */
+    fun accumulateForcedIssue(year: Int, month: Int, medicine: String, qty: Int) {
+        if (qty <= 0) return
+        val db = writableDatabase
+        val cursor = db.rawQuery(
+            "SELECT id, qty FROM forced_issues_monthly WHERE year=? AND month=? AND medicine=? LIMIT 1",
+            arrayOf(year.toString(), month.toString(), medicine)
+        )
+        if (cursor.moveToFirst()) {
+            val id = cursor.getInt(0)
+            val existingQty = cursor.getInt(1)
+            db.execSQL(
+                "UPDATE forced_issues_monthly SET qty=? WHERE id=?",
+                arrayOf((existingQty + qty), id)
+            )
+        } else {
+            db.execSQL(
+                "INSERT INTO forced_issues_monthly(year, month, medicine, qty) VALUES (?, ?, ?, ?)",
+                arrayOf(year, month, medicine, qty)
+            )
+        }
+        cursor.close()
+    }
+
+    /**
+     * Get all forced issues for a specific year/month.
+     * Returns map of medicineName -> totalForcedQty
+     */
+    fun getForcedIssuesForMonth(year: Int, month: Int): Map<String, Int> {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT medicine, qty FROM forced_issues_monthly WHERE year=? AND month=?",
+            arrayOf(year.toString(), month.toString())
+        )
+        val map = mutableMapOf<String, Int>()
+        while (cursor.moveToNext()) {
+            map[cursor.getString(0)] = cursor.getInt(1)
+        }
+        cursor.close()
+        return map
     }
 }

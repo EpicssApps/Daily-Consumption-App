@@ -415,6 +415,10 @@ class SummaryActivity : AppCompatActivity() {
                 monthly = archiveDb.getAggregatedForMonth(targetYear, targetMonth1)
             }
 
+            // Get forced issues for this month
+            val issueDb = DBHelper(this)
+            val forcedMap = issueDb.getForcedIssuesForMonth(targetYear, targetMonth1)
+
             // Mapping same as your monthlyConsumptionReport
             val medicineNameMapping = mapOf(
                 "Polymyxin B Sulphate Skin (20 gm)" to "Polymyxin B Sulphate Skin Ointment with lignocaine (20 gm)",
@@ -439,6 +443,12 @@ class SummaryActivity : AppCompatActivity() {
                 if (normalized != null) normalized to row else null
             }.toMap()
 
+            // Build forced map with same normalization
+            val forcedExportMap = forcedMap.mapNotNull { (med, qty) ->
+                val normalized = normalizeToExportName(med)
+                if (normalized != null) normalized to qty else null
+            }.toMap()
+
             // Filename: RS-01 {MonthName}-{Year}.csv
             val fileName = "RS-01 ${monthName(targetMonth1)}-${targetYear}.csv"
             val file = java.io.File(getExternalFilesDir(null), fileName)
@@ -449,15 +459,17 @@ class SummaryActivity : AppCompatActivity() {
                 } else value
             }
 
-            // Write CSV in your order. "StockAvailable" column uses totalClosing (as per your original behavior).
+            // Write CSV in your order. Added "Forced Issue" column.
             file.printWriter().use { out ->
-                out.println("MedicineName,TotalConsumption,TotalEmergency,Stock Available In Main Store,StockAvailable")
+                out.println("MedicineName,TotalConsumption,TotalEmergency,Stock Available In Main Store,StockAvailable,Forced Issue")
                 for (name in order) {
                     val row = exportMap[name]
+                    val forcedQty = forcedExportMap[name] ?: 0
+                    val forcedStr = if (forcedQty > 0) forcedQty.toString() else ""
                     if (row != null) {
-                        out.println("${csvEscape(name)},${row.totalConsumption},${row.totalEmergency},,${row.totalClosing}")
+                        out.println("${csvEscape(name)},${row.totalConsumption},${row.totalEmergency},,${row.totalClosing},${forcedStr}")
                     } else {
-                        out.println("${csvEscape(name)},,,")
+                        out.println("${csvEscape(name)},,,,,${forcedStr}")
                     }
                 }
             }

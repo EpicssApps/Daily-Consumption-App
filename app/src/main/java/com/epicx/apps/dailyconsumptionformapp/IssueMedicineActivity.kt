@@ -496,6 +496,21 @@ class IssueMedicineActivity : AppCompatActivity() {
                     // ***** Yahin pe indent save karen! *****
                     issueDb.saveIndent(selectedVehicle, indent)
 
+                    // Track forced issues for monthly report
+                    val cal = java.util.Calendar.getInstance()
+                    val currentYear = cal.get(java.util.Calendar.YEAR)
+                    val currentMonth = cal.get(java.util.Calendar.MONTH) + 1
+                    val forcedItems = unuploaded.filter { it.forced }
+                    forcedItems
+                        .groupBy { (it.medicine ?: "").trim() }
+                        .filterKeys { it.isNotBlank() }
+                        .forEach { (med, rows) ->
+                            val totalQty = rows.sumOf { it.qty }
+                            if (totalQty > 0) {
+                                issueDb.accumulateForcedIssue(currentYear, currentMonth, med, totalQty)
+                            }
+                        }
+
                     val ids: MutableList<Long?> = unuploaded.map { it.id as Long? }.toMutableList()
                     issueDb.markUploaded(ids)
 
