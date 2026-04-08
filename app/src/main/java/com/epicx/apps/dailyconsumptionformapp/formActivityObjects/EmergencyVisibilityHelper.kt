@@ -17,7 +17,8 @@ object EmergencyVisibilityHelper {
         rs01Vehicle: String = "RS-01",
         btnSendToMonthly: Button,
         btnSubmitDay: Button,
-        btnSubmit: Button
+        btnSubmit: Button,
+        btnTrackMedicine: Button? = null
     ) {
         if (vehicle == rs01Vehicle) {
             editEmergency.visibility = View.GONE
@@ -27,6 +28,7 @@ object EmergencyVisibilityHelper {
             btnSendToMonthly.visibility = View.GONE
             btnSubmitDay.visibility = View.GONE
             btnSubmit.visibility = View.GONE
+            btnTrackMedicine?.visibility = View.VISIBLE
         } else {
             editEmergency.visibility = View.VISIBLE
             textEmergencyLabel.visibility = View.VISIBLE
@@ -35,6 +37,7 @@ object EmergencyVisibilityHelper {
             btnSubmitDay.visibility = View.VISIBLE
             btnSendToMonthly.visibility = View.GONE
             btnSubmit.visibility = View.VISIBLE
+            btnTrackMedicine?.visibility = View.GONE
         }
     }
 }

@@ -246,6 +246,14 @@
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
             android:text="Reset Vehicle" />
+
+        <Button
+            android:id="@+id/btn_track_medicine"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Track Medicine"
+            android:visibility="gone" />
     </LinearLayout>
 
 </RelativeLayout>

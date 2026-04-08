@@ -13,6 +13,7 @@ import com.epicx.apps.dailyconsumptionformapp.FormConstants.newMedicineList
 import com.epicx.apps.dailyconsumptionformapp.FormConstants.vehicleList
 import com.epicx.apps.dailyconsumptionformapp.formActivityObjects.PendingRequestCache
 import com.epicx.apps.dailyconsumptionformapp.objects.MedicineDialogUtils
+import com.epicx.apps.dailyconsumptionformapp.objects.PdfShareHelper
 import com.epicx.apps.dailyconsumptionformapp.tempStorage.TempRs01DailyStore
 
 class IssueMedicineActivity : AppCompatActivity() {
@@ -514,6 +515,18 @@ class IssueMedicineActivity : AppCompatActivity() {
                     val ids: MutableList<Long?> = unuploaded.map { it.id as Long? }.toMutableList()
                     issueDb.markUploaded(ids)
 
+                    // ===== Save to submitted_issues for Track Medicine =====
+                    val submitTimestamp = System.currentTimeMillis()
+                    aggregated.forEach { medQty ->
+                        issueDb.insertSubmittedIssue(
+                            vehicle = vehicle,
+                            indent = indent,
+                            medicine = medQty.medicine,
+                            qty = medQty.qty,
+                            timestamp = submitTimestamp
+                        )
+                    }
+
                     val updatedCount = resp?.updated?.size ?: 0
                     val notFoundCount = resp?.notFound?.size ?: 0
                     val msg = buildString {
@@ -523,9 +536,40 @@ class IssueMedicineActivity : AppCompatActivity() {
                     }
                     toastLong(msg)
                     refreshPendingList()
+
+                    // ===== Show WhatsApp share dialog =====
+                    showSharePdfDialog(vehicle, indent, aggregated, submitTimestamp)
                 }
             }
             .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun showSharePdfDialog(
+        vehicle: String,
+        indent: String,
+        aggregated: List<GoogleSheetsClient.MedQty>,
+        timestamp: Long
+    ) {
+        AlertDialog.Builder(this)
+            .setTitle("Share as PDF?")
+            .setMessage("Kya aap is medicine issue record ko WhatsApp par PDF ke tor par share karna chahte hain?")
+            .setPositiveButton("Yes, Share") { d, _ ->
+                d.dismiss()
+                val entries = aggregated.map {
+                    PdfShareHelper.MedicineEntry(medicine = it.medicine, qty = it.qty)
+                }
+                PdfShareHelper.generateAndSharePdf(
+                    context = this,
+                    vehicle = vehicle,
+                    indent = indent,
+                    items = entries,
+                    timestamp = timestamp
+                )
+            }
+            .setNegativeButton("No") { d, _ ->
+                d.dismiss()
+            }
             .show()
     }
 

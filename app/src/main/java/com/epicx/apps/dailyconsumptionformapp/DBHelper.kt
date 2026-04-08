@@ -5,6 +5,15 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 
+data class SubmittedIssue(
+    val id: Long,
+    val vehicle: String,
+    val indent: String,
+    val medicine: String,
+    val qty: Int,
+    val submittedAt: Long
+)
+
 class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -47,6 +56,19 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                     "UNIQUE(year, month, medicine)" +
                     ")"
         )
+
+        // Submitted issues tracking table (for Track Medicine feature)
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS submitted_issues (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                    "vehicle TEXT NOT NULL," +
+                    "indent TEXT NOT NULL," +
+                    "medicine TEXT NOT NULL," +
+                    "qty INTEGER NOT NULL," +
+                    "submitted_at INTEGER NOT NULL" +
+                    ")"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_submitted_vehicle_indent ON submitted_issues(vehicle, indent)")
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -84,7 +106,21 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
                         ")"
             )
         }
-        // Future migrations >4 yahan
+        if (oldVersion < 5) {
+            // Submitted issues tracking table (for Track Medicine feature)
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS submitted_issues (" +
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT," +
+                        "vehicle TEXT NOT NULL," +
+                        "indent TEXT NOT NULL," +
+                        "medicine TEXT NOT NULL," +
+                        "qty INTEGER NOT NULL," +
+                        "submitted_at INTEGER NOT NULL" +
+                        ")"
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS idx_submitted_vehicle_indent ON submitted_issues(vehicle, indent)")
+        }
+        // Future migrations >5 yahan
     }
 
     // ---------------- Issue Items (existing) ----------------
@@ -180,7 +216,7 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
 
     companion object {
         const val DB_NAME = "issuedb.db"
-        const val DB_VER = 4   // bumped to 4 (added forced_issues_monthly table)
+        const val DB_VER = 5   // bumped to 5 (added submitted_issues table)
     }
 
     // ----------- Forced Issues Monthly Tracking -----------
@@ -228,5 +264,66 @@ class DBHelper(ctx: Context?) : SQLiteOpenHelper(ctx, DB_NAME, null, DB_VER) {
         }
         cursor.close()
         return map
+    }
+
+    // ----------- Submitted Issues Tracking (Track Medicine) -----------
+
+    /**
+     * Insert a submitted issue record for tracking purposes.
+     */
+    fun insertSubmittedIssue(vehicle: String, indent: String, medicine: String, qty: Int, timestamp: Long) {
+        if (qty <= 0) return
+        val db = writableDatabase
+        val cv = ContentValues()
+        cv.put("vehicle", vehicle)
+        cv.put("indent", indent)
+        cv.put("medicine", medicine)
+        cv.put("qty", qty)
+        cv.put("submitted_at", timestamp)
+        db.insert("submitted_issues", null, cv)
+    }
+
+    /**
+     * Get all submitted issues for a specific vehicle and indent number.
+     */
+    fun getSubmittedIssues(vehicle: String, indent: String): List<SubmittedIssue> {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT id, vehicle, indent, medicine, SUM(qty) as total_qty, MAX(submitted_at) as last_submitted " +
+                    "FROM submitted_issues WHERE vehicle=? AND indent=? GROUP BY medicine ORDER BY medicine ASC",
+            arrayOf(vehicle, indent)
+        )
+        val list = mutableListOf<SubmittedIssue>()
+        while (cursor.moveToNext()) {
+            list.add(
+                SubmittedIssue(
+                    id = cursor.getLong(0),
+                    vehicle = cursor.getString(1),
+                    indent = cursor.getString(2),
+                    medicine = cursor.getString(3),
+                    qty = cursor.getInt(4),
+                    submittedAt = cursor.getLong(5)
+                )
+            )
+        }
+        cursor.close()
+        return list
+    }
+
+    /**
+     * Get all distinct indents for a specific vehicle from submitted issues.
+     */
+    fun getDistinctIndentsForVehicle(vehicle: String): List<String> {
+        val db = readableDatabase
+        val cursor = db.rawQuery(
+            "SELECT DISTINCT indent FROM submitted_issues WHERE vehicle=? ORDER BY submitted_at DESC",
+            arrayOf(vehicle)
+        )
+        val list = mutableListOf<String>()
+        while (cursor.moveToNext()) {
+            list.add(cursor.getString(0))
+        }
+        cursor.close()
+        return list
     }
 }

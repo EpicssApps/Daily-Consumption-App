@@ -113,6 +113,7 @@ class FormActivity : AppCompatActivity() {
         val issueToVehicles = findViewById<Button>(R.id.btnIssue)
         val btnSendToMonthly = findViewById<Button>(R.id.btnSendToMonthly)
         val btnResetVehicle = findViewById<Button>(R.id.btn_reset_vehicle) // NEW
+        val btnTrackMedicine = findViewById<Button>(R.id.btn_track_medicine) // Track Medicine button
 
         val vehicleAdapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, vehicleList)
         vehicleAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -244,6 +245,19 @@ class FormActivity : AppCompatActivity() {
             startActivity(intent)
         }
 
+        // Track Medicine button - only visible for RS-01 user
+        btnTrackMedicine.setOnClickListener {
+            val intent = Intent(this, TrackMedicineActivity::class.java)
+            intent.putExtra("defaultVehicle", defaultVehicle)
+            startActivity(intent)
+        }
+        // Set initial visibility
+        if (defaultVehicle.equals("RS-01", ignoreCase = true)) {
+            btnTrackMedicine.visibility = View.VISIBLE
+        } else {
+            btnTrackMedicine.visibility = View.GONE
+        }
+
         // INITIAL VEHICLE FLOW
         if (defaultVehicle.isBlank()) {
             isFormActivityReady = true
@@ -255,7 +269,8 @@ class FormActivity : AppCompatActivity() {
                 issueToVehicles = issueToVehicles,
                 btnSendToMonthly = btnSendToMonthly,
                 btnSubmitDay = btnSubmitDay,
-                btnSubmit = btnSubmit
+                btnSubmit = btnSubmit,
+                btnTrackMedicine = btnTrackMedicine
             )
         } else {
             val index = vehicleList.indexOf(defaultVehicle)
@@ -270,7 +285,8 @@ class FormActivity : AppCompatActivity() {
                 issueToVehicles = issueToVehicles,
                 btnSendToMonthly = btnSendToMonthly,
                 btnSubmitDay = btnSubmitDay,
-                btnSubmit = btnSubmit
+                btnSubmit = btnSubmit,
+                btnTrackMedicine = btnTrackMedicine
             )
             attemptInitialSync(showLoading = false)
         }
@@ -291,13 +307,13 @@ class FormActivity : AppCompatActivity() {
                     .setPositiveButton("Reset") { d, _ ->
                         d.dismiss()
                         confirmResetVehicle(prefs, vehicleSpinner, medicineEdit, textOpening, textClosing, editConsumption, editEmergency,
-                            editEmergency, textEmergencyLabel, issueToVehicles, btnSendToMonthly, btnSubmitDay, btnSubmit, btnResetVehicle)
+                            editEmergency, textEmergencyLabel, issueToVehicles, btnSendToMonthly, btnSubmitDay, btnSubmit, btnResetVehicle, btnTrackMedicine)
                     }
                     .setNegativeButton("Cancel", null)
                     .show()
             } else {
                 confirmResetVehicle(prefs, vehicleSpinner, medicineEdit, textOpening, textClosing, editConsumption, editEmergency,
-                    editEmergency, textEmergencyLabel, issueToVehicles, btnSendToMonthly, btnSubmitDay, btnSubmit, btnResetVehicle)
+                    editEmergency, textEmergencyLabel, issueToVehicles, btnSendToMonthly, btnSubmitDay, btnSubmit, btnResetVehicle, btnTrackMedicine)
             }
         }
 
@@ -410,7 +426,8 @@ class FormActivity : AppCompatActivity() {
         issueToVehicles: Button,
         btnSendToMonthly: Button,
         btnSubmitDay: Button,
-        btnSubmit: Button
+        btnSubmit: Button,
+        btnTrackMedicine: Button
     ) {
         VehicleSelectHelper.showDialog(
             activity = this,
@@ -434,7 +451,8 @@ class FormActivity : AppCompatActivity() {
                     issueToVehicles = issueToVehicles,
                     btnSendToMonthly = btnSendToMonthly,
                     btnSubmitDay = btnSubmitDay,
-                    btnSubmit = btnSubmit
+                    btnSubmit = btnSubmit,
+                    btnTrackMedicine = btnTrackMedicine
                 )
                 attemptInitialSync(showLoading = true)
             }
@@ -456,7 +474,8 @@ class FormActivity : AppCompatActivity() {
         btnSendToMonthly: Button,
         btnSubmitDay: Button,
         btnSubmit: Button,
-        btnResetVehicle: Button
+        btnResetVehicle: Button,
+        btnTrackMedicine: Button
     ) {
         MaterialAlertDialogBuilder(this, R.style.AlertDialogTheme)
             .setTitle("Reset Vehicle")
@@ -483,7 +502,8 @@ class FormActivity : AppCompatActivity() {
                     issueToVehicles = issueToVehicles,
                     btnSendToMonthly = btnSendToMonthly,
                     btnSubmitDay = btnSubmitDay,
-                    btnSubmit = btnSubmit
+                    btnSubmit = btnSubmit,
+                    btnTrackMedicine = btnTrackMedicine
                 )
             }
             .setNegativeButton("No", null)
