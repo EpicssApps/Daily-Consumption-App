@@ -2,8 +2,8 @@ package com.epicx.apps.dailyconsumptionformapp
 
 object FormConstants {
     val vehicleList = listOf(
-        "BNA 07", "BNA 08", "BNA 09", "BNA 10", "BNA 11", "BNA 17", "BNA 21", "BNA 22",
-        "BNA 25", "BNA 26", "BNA 29", "RS-01"
+        "BNA 04","BNA 07", "BNA 08", "BNA 09", "BNA 10", "BNA 11", "BNA 13", "BNA 17", "BNA 22",
+        "BNA 25", "BNA 29", "RS-01"
     ) + (1..50).map { n -> "BNB %02d".format(n) }
 
     val newMedicineList = listOf(

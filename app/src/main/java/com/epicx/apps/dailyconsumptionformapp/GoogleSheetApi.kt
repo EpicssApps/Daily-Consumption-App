@@ -33,7 +33,7 @@ object GoogleSheetApi {
     // If different, replace above.
 
     private val shiftAmbulances = listOf(
-        "BNA 07","BNA 08","BNA 09","BNA 10","BNA 11","BNA 17","BNA 21","BNA 22","BNA 25","BNA 26","BNA 29"
+        "BNA 07","BNA 08","BNA 09","BNA 10","BNA 11","BNA 17","BNA 13","BNA 22","BNA 25","BNA 04","BNA 29"
     )
 
     private fun getShiftTag(): String? {
